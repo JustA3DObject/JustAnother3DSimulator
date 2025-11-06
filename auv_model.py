@@ -17,9 +17,6 @@ def create_sphere_marker(center, radius, resolution=10):
 def plot_auv(a, a_offset, c, c_offset, n, d, lf, l, cb_pos, cg_pos):
     """
     Generates and plots a 3D model and 2D profile of a torpedo-shaped AUV.
-    
-    Includes markers for Center of Buoyancy (CB) and Center of Gravity (CG).
-
     Args:
         ... (geometric args) ...
         cb_pos (tuple): (x, y, z) for Center of Buoyancy
@@ -31,6 +28,7 @@ def plot_auv(a, a_offset, c, c_offset, n, d, lf, l, cb_pos, cg_pos):
     num_theta_points = 80
     theta = np.linspace(0, 2 * np.pi, num_theta_points)
     z_offset = 0.001 
+
 
     # NOSE SECTION
     x_nose = np.linspace(0, a, num_x_points)
@@ -66,7 +64,7 @@ def plot_auv(a, a_offset, c, c_offset, n, d, lf, l, cb_pos, cg_pos):
     
     r_final = c_offset # Final radius at the tail (propeller hub)
 
-    # Side-Scan Sonar (SSS) Patches
+    # Side-Scan Sonar (SSS) Patches 
     sss_len = 0.3; sss_width_angle = 0.1
     x_sss_start = a + (mid_section_length - sss_len) / 2
     x_sss_end = x_sss_start + sss_len
@@ -130,7 +128,6 @@ def plot_auv(a, a_offset, c, c_offset, n, d, lf, l, cb_pos, cg_pos):
     
     fin_collection = Poly3DCollection(fin_verts, facecolors='darkslategrey')
     
-
     # 4-Bladed Propeller
     prop_tip_radius = fin_span * 1.0 
     prop_hub_radius = r_final
@@ -185,7 +182,7 @@ def plot_auv(a, a_offset, c, c_offset, n, d, lf, l, cb_pos, cg_pos):
     ax_2d.axvline(x=a, color='k', linestyle='--', linewidth=0.7, label=f'Nose/Mid (x={a:.3f})')
     ax_2d.axvline(x=lf, color='k', linestyle=':', linewidth=0.7, label=f'Mid/Tail (x={lf:.3f})')
     
-    # Component Markers
+    # Add Component Markers
     ax_2d.axvspan(fin_x_start, fin_x_end, color='darkslategrey', alpha=0.3, label='Fins Location')
     ax_2d.axvspan(cage_x_start, cage_x_end, color='black', alpha=0.3, label='Propeller & Shroud')
     sss_y = r_max + 0.005
@@ -197,11 +194,9 @@ def plot_auv(a, a_offset, c, c_offset, n, d, lf, l, cb_pos, cg_pos):
     mast_y_top = r_max + mast_height
     ax_2d.plot([x_mast_base, x_mast_base], [mast_y_base, mast_y_top], 'silver', linewidth=3, label='Antenna Mast (Top)')
 
-    # Plotting cb_pos[2] and cg_pos[2] (the Z-coordinate) on the y-axis
-    # of the 2D plot, not cb_pos[1] (the Y-coordinate).
+    # Add Physics Markers
     ax_2d.plot(cb_pos[0], cb_pos[2], 'bo', markersize=10, label='CB (Buoyancy)')
     ax_2d.plot(cg_pos[0], cg_pos[2], 'rX', markersize=10, label='CG (Gravity)')
-
 
     ax_2d.set_title('AUV 2D Hull Profile and Component Placement')
     ax_2d.set_xlabel('Vehicle Length (x) (m)')
@@ -286,18 +281,31 @@ def plot_auv(a, a_offset, c, c_offset, n, d, lf, l, cb_pos, cg_pos):
     plt.show()
 
 if __name__ == '__main__':
+    
+    old_L = 1.33
+    old_a = 0.191        # Nose Length (m)
+    old_a_offset = 0.0165 # Nose Offset (m)
+    old_c_offset = 0.0368 # Tail Offset (m)
+    old_lf = 0.828       # Vehicle Forward Length (m)
+
+    new_L = REMUS_PARAMS["L"]  # 1.6 m
+    new_D = REMUS_PARAMS["D"]  # 0.19 m
+    
+    # We pro-rate the visual section lengths to fit the new total length
+    scale_ratio = new_L / old_L  # (1.6 / 1.33)
+    
     auv_geo = {
-        'a': 0.191,        # Nose Length (m)
-        'a_offset': 0.0165, # Nose Offset (m)
-        'c_offset': 0.0368, # Tail Offset (m)
-        'n': 2,            # Exponential Coefficient
-        'd': REMUS_PARAMS["D"], # 0.191 m
-        'lf': 0.828,       # Vehicle Forward Length (m)
-        'l': REMUS_PARAMS["L"], # 1.33 m
+        'a': old_a * scale_ratio,
+        'a_offset': old_a_offset * scale_ratio,
+        'c_offset': old_c_offset * scale_ratio,
+        'n': 2,            # Exponential Coefficient (shape, does not scale)
+        'd': new_D,
+        'lf': old_lf * scale_ratio,
+        'l': new_L,
     }
     
     # Calculate 'c' (tail length)
-    calculated_c = auv_geo['l'] - auv_geo['lf'] # 1.33 - 0.828 = 0.502
+    calculated_c = auv_geo['l'] - auv_geo['lf'] 
 
     # Get physics marker positions
     cb_pos = PARAMS_DERIVED["cb_pos"]
