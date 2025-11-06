@@ -9,8 +9,10 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     Generates and plots a 3D model and 2D profile of a torpedo-shaped AUV,
     including simplified control fins, propeller hub, and external sensors.
 
+    ... (Args list remains the same) ...
     """
 
+    # --- 1. Define Basic Parameters and Resolution ---
     
     r_max = d / 2
     num_x_points = 100
@@ -19,8 +21,9 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     # Prevent Z-fighting (stitching) by adding a tiny offset
     z_offset = 0.001 
 
+    # --- 2. Calculate Coordinates for each Section ---
 
-    # NOSE SECTION
+    # == NOSE SECTION ==
     x_nose = np.linspace(0, a, num_x_points)
     # Equation: r(x) = r_max - (r_max - a_offset) * (1 - x/a)^n
     # This gives r=a_offset at x=0 and r=r_max at x=a.
@@ -31,7 +34,7 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     Y_nose = R_nose * np.cos(THETA_nose)
     Z_nose = R_nose * np.sin(THETA_nose)
 
-    # MID-SECTION (Cylinder)
+    # == MID-SECTION (Cylinder) ==
     mid_section_length = lf - a
     num_x_mid_points = max(2, int(num_x_points * (mid_section_length / a)))
     x_mid = np.linspace(a, lf, num_x_mid_points)
@@ -42,7 +45,7 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     Y_mid = R_mid * np.cos(THETA_mid)
     Z_mid = R_mid * np.sin(THETA_mid)
 
-    # TAIL SECTION (Power Series Curve of Revolution)
+    # == TAIL SECTION (Power Series Curve of Revolution) ==
     num_x_tail_points = max(2, int(num_x_points * (c / a)))
     x_tail = np.linspace(lf, l, num_x_tail_points)
     
@@ -59,30 +62,9 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     
     r_final = c_offset # Final radius at the tail
 
-    # Generate 2D Profile Plot
-    print("Generating 2D profile plot...")
-    fig_2d, ax_2d = plt.subplots(figsize=(15, 5))
-    
-    ax_2d.plot(x_nose, r_nose, 'b-', label='Nose Profile')
-    ax_2d.plot(x_nose, -r_nose, 'b-')
-    ax_2d.plot(x_mid, r_mid, 'g-', label='Mid-section Profile')
-    ax_2d.plot(x_mid, -r_mid, 'g-')
-    ax_2d.plot(x_tail, r_tail, 'r-', label='Tail Profile')
-    ax_2d.plot(x_tail, -r_tail, 'r-')
+    # --- 3. Define External Components ---
 
-    ax_2d.axvline(x=a, color='k', linestyle='--', linewidth=0.7, label=f'Nose/Mid (x={a:.3f})')
-    ax_2d.axvline(x=lf, color='k', linestyle=':', linewidth=0.7, label=f'Mid/Tail (x={lf:.3f})')
-
-    ax_2d.set_title('AUV 2D Hull Profile')
-    ax_2d.set_xlabel('Vehicle Length (x) (m)')
-    ax_2d.set_ylabel('Vehicle Radius (r) (m)')
-    ax_2d.grid(True, linestyle=':', alpha=0.6)
-    ax_2d.legend()
-    ax_2d.set_aspect('equal')
-    plt.tight_layout()
-
-
-    # Side-Scan Sonar (SSS) Patches
+    # == Side-Scan Sonar (SSS) Patches ==
     # On the mid-body, port (+Y) and starboard (-Y)
     sss_len = 0.3
     sss_width_angle = 0.1 # Angular width
@@ -105,7 +87,7 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     Y_sss2 = R_sss2 * np.cos(TH_sss2)
     Z_sss2 = R_sss2 * np.sin(TH_sss2)
 
-    # DVL (Doppler Velocity Log) Box
+    # == DVL (Doppler Velocity Log) Box ==
     # On the underside (-Z) near the tail junction
     dvl_len = 0.1
     dvl_width = 0.08
@@ -140,7 +122,7 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     ]
     dvl_collection = Poly3DCollection(dvl_faces, facecolors='orange')
 
-    # Antenna Mast
+    # == Antenna Mast ==
     # On the top (+Z) of the rear mid-section
     mast_height = 0.08
     mast_radius = 0.01
@@ -152,8 +134,10 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     TH_mast, Z_mast = np.meshgrid(theta_mast, z_mast)
     X_mast = x_mast_base + mast_radius * np.cos(TH_mast)
     Y_mast = 0 + mast_radius * np.sin(TH_mast)
-        
-    # CONTROL FINS
+    
+    # --- 3.5. Define Control Fins and Propeller ---
+    
+    # == CONTROL FINS ==
     fin_length = 0.12
     fin_span = 0.1
     fin_taper_ratio = 0.8
@@ -184,7 +168,7 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     
     fin_collection = Poly3DCollection(fin_verts, facecolors='darkslategrey')
     
-    # PROPELLER (THRUSTER)
+    # == PROPELLER (THRUSTER) ==
     prop_length = 0.05
     x_prop = np.linspace(l, l + prop_length, 20)
     r_prop = np.linspace(r_final, 0.01, 20)
@@ -195,7 +179,69 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     Z_prop = R_prop * np.sin(THETA_prop)
 
 
-    # Create the 3D Plot
+    # --- 3.8. Generate 2D Profile Plot (Moved and Updated) ---
+    print("Generating 2D profile plot with component markers...")
+    fig_2d, ax_2d = plt.subplots(figsize=(15, 6))
+    
+    # Plot the hull profile
+    ax_2d.plot(x_nose, r_nose, 'b-', label='Nose Profile')
+    ax_2d.plot(x_nose, -r_nose, 'b-')
+    ax_2d.plot(x_mid, r_mid, 'g-', label='Mid-section Profile')
+    ax_2d.plot(x_mid, -r_mid, 'g-')
+    ax_2d.plot(x_tail, r_tail, 'r-', label='Tail Profile')
+    ax_2d.plot(x_tail, -r_tail, 'r-')
+
+    # Add lines for section breaks
+    ax_2d.axvline(x=a, color='k', linestyle='--', linewidth=0.7, label=f'Nose/Mid (x={a:.3f})')
+    ax_2d.axvline(x=lf, color='k', linestyle=':', linewidth=0.7, label=f'Mid/Tail (x={lf:.3f})')
+    
+    # == Add Component Markers ==
+    
+    # 1. Fins (as a shaded region)
+    ax_2d.axvspan(fin_x_start, fin_x_end, color='darkslategrey', alpha=0.3, label='Fins Location')
+    
+    # 2. Propeller Hub (as a shaded region)
+    ax_2d.axvspan(l, l + prop_length, color='black', alpha=0.3, label='Propeller Hub')
+
+    # 3. SSS (as a thick line *on* the hull)
+    sss_y = r_max + 0.005 # Slightly above the hull
+    ax_2d.plot([x_sss_start, x_sss_end], [sss_y, sss_y], 'grey', linewidth=4, label='SSS Array (Top)')
+    ax_2d.plot([x_sss_start, x_sss_end], [-sss_y, -sss_y], 'grey', linewidth=4, label='SSS Array (Bottom)')
+    
+    # 4. DVL (as a thick line *below* the hull)
+    dvl_y = -r_max - 0.01 # Slightly below the hull
+    ax_2d.plot([x_dvl_start, x_dvl_end], [dvl_y, dvl_y], 'orange', linewidth=4, label='DVL (Bottom)')
+
+    # 5. Antenna Mast (as a vertical line)
+    mast_y_base = r_max
+    mast_y_top = r_max + mast_height
+    ax_2d.plot([x_mast_base, x_mast_base], [mast_y_base, mast_y_top], 'silver', linewidth=3, label='Antenna Mast (Top)')
+
+    # --- Formatting the 2D Plot ---
+    ax_2d.set_title('AUV 2D Hull Profile and Component Placement')
+    ax_2d.set_xlabel('Vehicle Length (x) (m)')
+    ax_2d.set_ylabel('Vehicle Radius (r) (m)')
+    ax_2d.grid(True, linestyle=':', alpha=0.6)
+    
+    # Adjust Y-limits to show mast and DVL marker
+    ax_2d.set_ylim(-(r_max + mast_height + 0.05), r_max + mast_height + 0.05)
+    # Adjust X-limits to show prop
+    ax_2d.set_xlim(-0.05, l + prop_length + 0.05)
+    
+    # Re-order legend to be more readable
+    handles, labels = ax_2d.get_legend_handles_labels()
+    # A simple way to group them
+    order = [0, 1, 2, 3, 4, 10, 5, 6, 7, 8, 9] 
+    if len(handles) == len(order):
+        ax_2d.legend([handles[i] for i in order], [labels[i] for i in order], loc='upper right', fontsize='small')
+    else:
+        ax_2d.legend(loc='upper right', fontsize='small') # Fallback
+        
+    ax_2d.set_aspect('equal')
+    plt.tight_layout()
+
+
+    # --- 4. Create the 3D Plot ---
     print("Generating 3D surface model...")
     fig = plt.figure(figsize=(15, 8))
     ax = fig.add_subplot(111, projection='3d')
@@ -214,6 +260,8 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     ax.plot_surface(X_sss2, Y_sss2, Z_sss2, color='grey')
     ax.add_collection3d(dvl_collection)
     ax.plot_surface(X_mast, Y_mast, Z_mast, color='silver')
+
+    # --- 5. Formatting the 3D Plot ---
     
     ax.set_xlabel('X - Longitudinal Axis (m)', fontsize=12)
     ax.set_ylabel('Y - Transverse Axis (m)', fontsize=12)
