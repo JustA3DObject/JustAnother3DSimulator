@@ -91,22 +91,30 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     Y_mast = 0 + mast_radius * np.sin(TH_mast)
         
     fin_length = 0.12; fin_span = 0.1; fin_taper_ratio = 0.8
-    fin_x_start = l - fin_length; fin_x_end = l
+    fin_x_end = l - 0.025 
+    fin_x_start = fin_x_end - fin_length 
     
+    # Recalculate fin root radius
     x_norm_fin_start = (fin_x_start - lf) / c
     r_fin_start = c_offset + (r_max - c_offset) * (1 - x_norm_fin_start**n)
-    r_fin_end = r_final
+    
+    x_norm_fin_end = (fin_x_end - lf) / c
+    r_fin_end = c_offset + (r_max - c_offset) * (1 - x_norm_fin_end**n)
     
     fin_verts = []
+    # Fin 1: Horizontal (+Y)
     v1 = [fin_x_start, r_fin_start, 0]; v2 = [fin_x_start, r_fin_start + fin_span, 0]
     v3 = [fin_x_end, r_fin_end + fin_span * fin_taper_ratio, 0]; v4 = [fin_x_end, r_fin_end, 0]
     fin_verts.append([v1, v2, v3, v4])
+    # Fin 2: Horizontal (-Y)
     v1 = [fin_x_start, -r_fin_start, 0]; v2 = [fin_x_start, -(r_fin_start + fin_span), 0]
     v3 = [fin_x_end, -(r_fin_end + fin_span * fin_taper_ratio), 0]; v4 = [fin_x_end, -r_fin_end, 0]
     fin_verts.append([v1, v2, v3, v4])
+    # Fin 3: Vertical (+Z)
     v1 = [fin_x_start, 0, r_fin_start]; v2 = [fin_x_start, 0, r_fin_start + fin_span]
     v3 = [fin_x_end, 0, r_fin_end + fin_span * fin_taper_ratio]; v4 = [fin_x_end, 0, r_fin_end]
     fin_verts.append([v1, v2, v3, v4])
+    # Fin 4: Vertical (-Z)
     v1 = [fin_x_start, 0, -r_fin_start]; v2 = [fin_x_start, 0, -(r_fin_start + fin_span)]
     v3 = [fin_x_end, 0, -(r_fin_end + fin_span * fin_taper_ratio)]; v4 = [fin_x_end, 0, -r_fin_end]
     fin_verts.append([v1, v2, v3, v4])
@@ -119,7 +127,7 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     prop_hub_radius = r_final       # Attaches to tail hub
     prop_pitch = 0.1                # (x-distance per radian of twist)
     prop_chord_angle = np.pi / 8    # Angular width of the blade
-    prop_x_pos = l + 0.01           # Base X-position of propeller
+    prop_x_pos = l                  # Base X-position of propeller
     
     prop_blades = [] # To store (X, Y, Z) for each blade
     
@@ -145,6 +153,7 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     # Protective Cage (Shroud)
     cage_radius = prop_tip_radius + 0.015 # Slightly larger than prop
     cage_length = 0.08
+    # Cage starts 0.5cm after new fin end position
     cage_x_start = l - 0.02
     cage_x_end = cage_x_start + cage_length
     
