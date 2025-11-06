@@ -94,7 +94,4 @@ if __name__ == '__main__':
     """ Utility to print all defined parameters """
     import json
     print(f"Loaded {len(HYDRO_PARAMS)} hydrodynamic parameters.")
-    print("==================================================")
     print(json.dumps(HYDRO_PARAMS, indent=4))
-    print("==================================================")
-    print("REMEMBER: These are placeholder values for demonstration.")
