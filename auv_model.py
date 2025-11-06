@@ -1,13 +1,29 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-# Import for plotting 3D polygons
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from auv_parameters import REMUS_PARAMS, PARAMS_DERIVED
 
-def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
+def create_sphere_marker(center, radius, resolution=10):
+    """Helper function to create (X, Y, Z) for a sphere surface."""
+    u = np.linspace(0, 2 * np.pi, resolution)
+    v = np.linspace(0, np.pi, resolution)
+    
+    X = center[0] + radius * np.outer(np.cos(u), np.sin(v))
+    Y = center[1] + radius * np.outer(np.sin(u), np.sin(v))
+    Z = center[2] + radius * np.outer(np.ones(np.size(u)), np.cos(v))
+    return X, Y, Z
+
+def plot_auv(a, a_offset, c, c_offset, n, d, lf, l, cb_pos, cg_pos):
     """
-    Generates and plots a 3D model and 2D profile of a torpedo-shaped AUV,
-    including control fins, sensors, a 4-bladed propeller, and a protective cage.
+    Generates and plots a 3D model and 2D profile of a torpedo-shaped AUV.
+    
+    Includes markers for Center of Buoyancy (CB) and Center of Gravity (CG).
+
+    Args:
+        ... (geometric args) ...
+        cb_pos (tuple): (x, y, z) for Center of Buoyancy
+        cg_pos (tuple): (x, y, z) for Center of Gravity
     """
     
     r_max = d / 2
@@ -51,8 +67,7 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     r_final = c_offset # Final radius at the tail (propeller hub)
 
     # Side-Scan Sonar (SSS) Patches
-    sss_len = 0.3
-    sss_width_angle = 0.1
+    sss_len = 0.3; sss_width_angle = 0.1
     x_sss_start = a + (mid_section_length - sss_len) / 2
     x_sss_end = x_sss_start + sss_len
     x_sss = np.linspace(x_sss_start, x_sss_end, 10)
@@ -92,68 +107,52 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
         
     fin_length = 0.12; fin_span = 0.1; fin_taper_ratio = 0.8
     fin_x_end = l - 0.025 
-    fin_x_start = fin_x_end - fin_length 
+    fin_x_start = fin_x_end - fin_length
     
-    # Recalculate fin root radius
     x_norm_fin_start = (fin_x_start - lf) / c
     r_fin_start = c_offset + (r_max - c_offset) * (1 - x_norm_fin_start**n)
-    
     x_norm_fin_end = (fin_x_end - lf) / c
     r_fin_end = c_offset + (r_max - c_offset) * (1 - x_norm_fin_end**n)
     
     fin_verts = []
-    # Fin 1: Horizontal (+Y)
     v1 = [fin_x_start, r_fin_start, 0]; v2 = [fin_x_start, r_fin_start + fin_span, 0]
     v3 = [fin_x_end, r_fin_end + fin_span * fin_taper_ratio, 0]; v4 = [fin_x_end, r_fin_end, 0]
     fin_verts.append([v1, v2, v3, v4])
-    # Fin 2: Horizontal (-Y)
     v1 = [fin_x_start, -r_fin_start, 0]; v2 = [fin_x_start, -(r_fin_start + fin_span), 0]
     v3 = [fin_x_end, -(r_fin_end + fin_span * fin_taper_ratio), 0]; v4 = [fin_x_end, -r_fin_end, 0]
     fin_verts.append([v1, v2, v3, v4])
-    # Fin 3: Vertical (+Z)
     v1 = [fin_x_start, 0, r_fin_start]; v2 = [fin_x_start, 0, r_fin_start + fin_span]
     v3 = [fin_x_end, 0, r_fin_end + fin_span * fin_taper_ratio]; v4 = [fin_x_end, 0, r_fin_end]
     fin_verts.append([v1, v2, v3, v4])
-    # Fin 4: Vertical (-Z)
     v1 = [fin_x_start, 0, -r_fin_start]; v2 = [fin_x_start, 0, -(r_fin_start + fin_span)]
     v3 = [fin_x_end, 0, -(r_fin_end + fin_span * fin_taper_ratio)]; v4 = [fin_x_end, 0, -r_fin_end]
     fin_verts.append([v1, v2, v3, v4])
     
     fin_collection = Poly3DCollection(fin_verts, facecolors='darkslategrey')
     
+
     # 4-Bladed Propeller
-    # Note: This is a simplified twisted blade, not a true hydrofoil.
-    prop_tip_radius = fin_span * 0.9 # Propeller radius (slightly < fin span)
-    prop_hub_radius = r_final       # Attaches to tail hub
-    prop_pitch = 0.1                # (x-distance per radian of twist)
-    prop_chord_angle = np.pi / 8    # Angular width of the blade
-    prop_x_pos = l                  # Base X-position of propeller
+    prop_tip_radius = fin_span * 1.0 
+    prop_hub_radius = r_final
+    prop_pitch = 0.1
+    prop_chord_angle = np.pi / 8
+    prop_x_pos = l
     
-    prop_blades = [] # To store (X, Y, Z) for each blade
-    
-    # Define radial and angular points for a blade
+    prop_blades = []
     r_blade = np.linspace(prop_hub_radius, prop_tip_radius, 8)
     th_blade_base = np.linspace(-prop_chord_angle/2, prop_chord_angle/2, 5)
     
     for i in range(4): # 4 blades
-        base_angle = i * (np.pi / 2) # 0, 90, 180, 270 degrees
-        
+        base_angle = i * (np.pi / 2)
         R_blade, TH_blade = np.meshgrid(r_blade, th_blade_base)
-        
-        # Calculate Y and Z (the flat blade shape)
         Y_blade = R_blade * np.cos(TH_blade + base_angle)
         Z_blade = R_blade * np.sin(TH_blade + base_angle)
-        
-        # Add twist (pitch): X coordinate depends on radius and angle
-        # This creates the "twisted" surface
         X_blade = prop_x_pos + (R_blade * prop_pitch) * np.sin(TH_blade)
-        
         prop_blades.append((X_blade, Y_blade, Z_blade))
 
     # Protective Cage (Shroud)
-    cage_radius = prop_tip_radius + 0.015 # Slightly larger than prop
+    cage_radius = prop_tip_radius + 0.015
     cage_length = 0.08
-    # Cage starts 0.5cm after new fin end position
     cage_x_start = l - 0.02
     cage_x_end = cage_x_start + cage_length
     
@@ -163,6 +162,12 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     X_cage, TH_cage = np.meshgrid(x_cage, theta_cage)
     Y_cage = cage_radius * np.cos(TH_cage)
     Z_cage = cage_radius * np.sin(TH_cage)
+    
+    # Define Physics Markers
+    marker_radius = 0.02
+    X_cb, Y_cb, Z_cb = create_sphere_marker(cb_pos, marker_radius)
+    X_cg, Y_cg, Z_cg = create_sphere_marker(cg_pos, marker_radius)
+
 
     # Generate 2D Profile Plot
     print("Generating 2D profile plot with component markers...")
@@ -179,26 +184,24 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     # Add lines for section breaks
     ax_2d.axvline(x=a, color='k', linestyle='--', linewidth=0.7, label=f'Nose/Mid (x={a:.3f})')
     ax_2d.axvline(x=lf, color='k', linestyle=':', linewidth=0.7, label=f'Mid/Tail (x={lf:.3f})')
-        
-    # 1. Fins (as a shaded region)
-    ax_2d.axvspan(fin_x_start, fin_x_end, color='darkslategrey', alpha=0.3, label='Fins Location')
     
-    # 2. Propeller & Shroud
+    # Component Markers
+    ax_2d.axvspan(fin_x_start, fin_x_end, color='darkslategrey', alpha=0.3, label='Fins Location')
     ax_2d.axvspan(cage_x_start, cage_x_end, color='black', alpha=0.3, label='Propeller & Shroud')
-
-    # 3. SSS (as a thick line *on* the hull)
-    sss_y = r_max + 0.005 # Slightly above the hull
+    sss_y = r_max + 0.005
     ax_2d.plot([x_sss_start, x_sss_end], [sss_y, sss_y], 'grey', linewidth=4, label='SSS Array (Top)')
     ax_2d.plot([x_sss_start, x_sss_end], [-sss_y, -sss_y], 'grey', linewidth=4)
-    
-    # 4. DVL (as a thick line *below* the hull)
-    dvl_y = -r_max - 0.01 # Slightly below the hull
+    dvl_y = -r_max - 0.01
     ax_2d.plot([x_dvl_start, x_dvl_end], [dvl_y, dvl_y], 'orange', linewidth=4, label='DVL (Bottom)')
-
-    # 5. Antenna Mast (as a vertical line)
     mast_y_base = r_max
     mast_y_top = r_max + mast_height
     ax_2d.plot([x_mast_base, x_mast_base], [mast_y_base, mast_y_top], 'silver', linewidth=3, label='Antenna Mast (Top)')
+
+    # Plotting cb_pos[2] and cg_pos[2] (the Z-coordinate) on the y-axis
+    # of the 2D plot, not cb_pos[1] (the Y-coordinate).
+    ax_2d.plot(cb_pos[0], cb_pos[2], 'bo', markersize=10, label='CB (Buoyancy)')
+    ax_2d.plot(cg_pos[0], cg_pos[2], 'rX', markersize=10, label='CG (Gravity)')
+
 
     ax_2d.set_title('AUV 2D Hull Profile and Component Placement')
     ax_2d.set_xlabel('Vehicle Length (x) (m)')
@@ -206,7 +209,7 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     ax_2d.grid(True, linestyle=':', alpha=0.6)
     
     ax_2d.set_ylim(-(r_max + mast_height + 0.05), r_max + mast_height + 0.05)
-    ax_2d.set_xlim(-0.05, cage_x_end + 0.05) # Extend for prop cage
+    ax_2d.set_xlim(-0.05, cage_x_end + 0.05) 
     
     ax_2d.legend(loc='upper right', fontsize='small')
     ax_2d.set_aspect('equal')
@@ -239,22 +242,27 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     # Plot Propeller Cage
     ax.plot_surface(X_cage, Y_cage, Z_cage, color='grey', alpha=0.4)
     
+    # Plot Physics Markers (NEW)
+    # Center of Buoyancy (Blue Sphere)
+    ax.plot_surface(X_cb, Y_cb, Z_cb, color='blue', alpha=1.0)
+    # Center of Gravity (Red Sphere)
+    ax.plot_surface(X_cg, Y_cg, Z_cg, color='red', alpha=1.0)
+    
     ax.set_xlabel('X - Longitudinal Axis (m)', fontsize=12)
     ax.set_ylabel('Y - Transverse Axis (m)', fontsize=12)
     ax.set_zlabel('Z - Vertical Axis (m)', fontsize=12)
-    ax.set_title('3D Model of AUV with Components, Propeller, and Shroud', fontsize=16)
+    ax.set_title('3D Model of AUV with Components and Physics Markers', fontsize=16)
 
     # Set aspect ratio to be equal
-    all_x = np.concatenate([X_nose.flatten(), X_mid.flatten(), X_tail.flatten(), X_sss1.flatten(), X_sss2.flatten(), X_mast.flatten(), X_cage.flatten()])
-    all_y = np.concatenate([Y_nose.flatten(), Y_mid.flatten(), Y_tail.flatten(), Y_sss1.flatten(), Y_sss2.flatten(), Y_mast.flatten(), Y_cage.flatten()])
-    all_z = np.concatenate([Z_nose.flatten(), Z_mid.flatten(), Z_tail.flatten(), Z_sss1.flatten(), Z_sss2.flatten(), Z_mast.flatten(), Z_cage.flatten()])
+    all_x = np.concatenate([X_nose.flatten(), X_mid.flatten(), X_tail.flatten(), X_sss1.flatten(), X_sss2.flatten(), X_mast.flatten(), X_cage.flatten(), X_cb.flatten(), X_cg.flatten()])
+    all_y = np.concatenate([Y_nose.flatten(), Y_mid.flatten(), Y_tail.flatten(), Y_sss1.flatten(), Y_sss2.flatten(), Y_mast.flatten(), Y_cage.flatten(), Y_cb.flatten(), Y_cg.flatten()])
+    all_z = np.concatenate([Z_nose.flatten(), Z_mid.flatten(), Z_tail.flatten(), Z_sss1.flatten(), Z_sss2.flatten(), Z_mast.flatten(), Z_cage.flatten(), Z_cb.flatten(), Z_cg.flatten()])
     
     fin_verts_flat = [v_i for fin in fin_verts for v_i in fin]
     all_x = np.concatenate([all_x, [v_i[0] for v_i in fin_verts_flat], v[:,0]])
     all_y = np.concatenate([all_y, [v_i[1] for v_i in fin_verts_flat], v[:,1]])
     all_z = np.concatenate([all_z, [v_i[2] for v_i in fin_verts_flat], v[:,2]])
     
-    # Add prop blades to extents
     for X_b, Y_b, Z_b in prop_blades:
         all_x = np.concatenate([all_x, X_b.flatten()])
         all_y = np.concatenate([all_y, Y_b.flatten()])
@@ -278,24 +286,26 @@ def plot_auv(a, a_offset, b, c, c_offset, n, theta_tail, d, lf, l):
     plt.show()
 
 if __name__ == '__main__':
-    auv_params = {
+    auv_geo = {
         'a': 0.191,        # Nose Length (m)
         'a_offset': 0.0165, # Nose Offset (m)
-        'b': 0.654,        # Mid-section Length (m) - not directly used
-        'c': 0.541,        # Tail section Length (m) - parameter for tail equation
         'c_offset': 0.0368, # Tail Offset (m)
         'n': 2,            # Exponential Coefficient
-        'theta_tail': 0.436,# Included angle at tail (rad) - not used
-        'd': 0.191,        # Max Hull Diameter (m)
+        'd': REMUS_PARAMS["D"], # 0.191 m
         'lf': 0.828,       # Vehicle Forward Length (m)
-        'l': 1.33          # Total Vehicle Length (m)
+        'l': REMUS_PARAMS["L"], # 1.33 m
     }
     
-    calculated_c = auv_params['l'] - auv_params['lf']
-    if abs(auv_params['c'] - calculated_c) > 0.01:
-        print(f"Warning: Provided 'c' ({auv_params['c']}) does not match 'l' - 'lf' ({calculated_c:.3f}).")
-        print(f"Using c = {calculated_c:.3f} for tail section calculation.")
-    
-    auv_params['c'] = calculated_c 
+    # Calculate 'c' (tail length)
+    calculated_c = auv_geo['l'] - auv_geo['lf'] # 1.33 - 0.828 = 0.502
 
-    plot_auv(**auv_params)
+    # Get physics marker positions
+    cb_pos = PARAMS_DERIVED["cb_pos"]
+    cg_pos = PARAMS_DERIVED["cg_pos"]
+
+    plot_auv(
+        c=calculated_c,
+        cb_pos=cb_pos,
+        cg_pos=cg_pos,
+        **auv_geo
+    )
