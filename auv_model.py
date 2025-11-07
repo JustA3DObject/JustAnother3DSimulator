@@ -432,7 +432,7 @@ def create_interactive_auv():
         ax.set_xlabel('X (m)', fontsize=10)
         ax.set_ylabel('Y (m)', fontsize=10)
         ax.set_zlabel('Z (m)', fontsize=10)
-        ax.set_title('AUV Control', fontsize=12)
+        ax.set_title('AUV Simulator', fontsize=12)
         
         # Set initial view limits
         limit = 3
@@ -571,32 +571,16 @@ def create_interactive_auv():
     
 
 if __name__ == '__main__':
-    
-    old_L = 1.33
-    old_a = 0.191        # Nose Length (m)
-    old_a_offset = 0.0165 # Nose Offset (m)
-    old_c_offset = 0.0368 # Tail Offset (m)
-    old_lf = 0.828       # Vehicle Forward Length (m)
-
-    new_L = REMUS_PARAMS["L"]  # 1.6 m
-    new_D = REMUS_PARAMS["D"]  # 0.19 m
-    
-    # We pro-rate the visual section lengths to fit the new total length
-    scale_ratio = new_L / old_L  # (1.6 / 1.33)
-    
-    auv_geo = {
-        'a': old_a * scale_ratio,
-        'a_offset': old_a_offset * scale_ratio,
-        'c_offset': old_c_offset * scale_ratio,
-        'n': 2,            # Exponential Coefficient (shape, does not scale)
-        'd': new_D,
-        'lf': old_lf * scale_ratio,
-        'l': new_L,
-    }
-    
-    # Calculate 'c' (tail length)
-    calculated_c = auv_geo['l'] - auv_geo['lf'] 
-
-    # Get physics marker positions
-    cb_pos = PARAMS_DERIVED["cb_pos"]
-    cg_pos = PARAMS_DERIVED["cg_pos"]
+    print("AUV Simulator - Keyboard Mode")
+    print("\nControls:")
+    print("  W - Accelerate Forward")
+    print("  X - Accelerate Backward")
+    print("  A - Yaw Left (Turn Left)")
+    print("  D - Yaw Right (Turn Right)")
+    print("  Z - Pitch Up (Nose Up)")
+    print("  C - Pitch Down (Nose Down)")
+    print("  B - Emergency Brake")
+    print("  R - Reset Position")
+    print("\nMax Velocity: 2.0 m/s")
+    print("Forward motion follows the AUV's orientation")
+    create_interactive_auv()
