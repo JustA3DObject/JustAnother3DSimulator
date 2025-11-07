@@ -417,6 +417,31 @@ def create_interactive_auv():
                            fontsize=9, family='monospace',
                            bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
     
+    def on_key_press(event):
+        """Handle key press events"""
+        if event.key in ['w', 'x', 'a', 'd', 'z', 'c', 'b', 'r']:
+            controller.keys_pressed.add(event.key)
+    
+    def on_key_release(event):
+        """Handle key release events"""
+        if event.key in controller.keys_pressed:
+            controller.keys_pressed.discard(event.key)
+    
+    def init():
+        """Initialize animation"""
+        ax.set_xlabel('X (m)', fontsize=10)
+        ax.set_ylabel('Y (m)', fontsize=10)
+        ax.set_zlabel('Z (m)', fontsize=10)
+        ax.set_title('Interactive AUV Control - Keyboard Controls (WXADZC)', fontsize=12)
+        
+        # Set initial view limits
+        limit = 3
+        ax.set_xlim(-limit, limit)
+        ax.set_ylim(-limit, limit)
+        ax.set_zlim(-limit, limit)
+        
+        return []
+    
 
 if __name__ == '__main__':
     
