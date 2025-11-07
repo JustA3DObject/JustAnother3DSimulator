@@ -263,7 +263,19 @@ class AUVController:
         
         return transformed_fins
     
-    
+    def transform_dvl(self):
+        """Transform DVL box"""
+        R = self.rotation_matrix(*self.orientation)
+        transformed_faces = []
+        
+        for face in self.base_geometry['dvl_faces']:
+            face_array = np.array(face)
+            rotated = (R @ face_array.T).T
+            translated = rotated + self.position
+            transformed_faces.append(translated)
+        
+        return transformed_faces    
+
 
 if __name__ == '__main__':
     
