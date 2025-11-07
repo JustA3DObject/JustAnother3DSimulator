@@ -442,6 +442,56 @@ def create_interactive_auv():
         
         return []
     
+    def update(frame):
+        """Animation update function"""
+        nonlocal surf_nose, surf_mid, surf_tail, fin_collections
+        nonlocal surf_sss1, surf_sss2, surf_mast, surf_cage, dvl_collection, prop_surfaces
+        
+        # Update state based on keyboard
+        controller.update_state()
+        
+        # Clear previous artists
+        if surf_nose:
+            surf_nose.remove()
+        if surf_mid:
+            surf_mid.remove()
+        if surf_tail:
+            surf_tail.remove()
+        if surf_sss1:
+            surf_sss1.remove()
+        if surf_sss2:
+            surf_sss2.remove()
+        if surf_mast:
+            surf_mast.remove()
+        if surf_cage:
+            surf_cage.remove()
+        if dvl_collection:
+            dvl_collection.remove()
+        for fc in fin_collections:
+            fc.remove()
+        fin_collections.clear()
+        for ps in prop_surfaces:
+            ps.remove()
+        prop_surfaces.clear()
+        
+        # Transform and plot main hull geometry
+        X_nose, Y_nose, Z_nose = controller.transform_geometry(
+            *controller.base_geometry['nose'])
+        X_mid, Y_mid, Z_mid = controller.transform_geometry(
+            *controller.base_geometry['mid'])
+        X_tail, Y_tail, Z_tail = controller.transform_geometry(
+            *controller.base_geometry['tail'])
+        
+        surf_nose = ax.plot_surface(X_nose, Y_nose, Z_nose, 
+                                    color='blue', alpha=0.7, 
+                                    rstride=5, cstride=5, shade=True)
+        surf_mid = ax.plot_surface(X_mid, Y_mid, Z_mid, 
+                                   color='green', alpha=0.7,
+                                   rstride=5, cstride=5, shade=True)
+        surf_tail = ax.plot_surface(X_tail, Y_tail, Z_tail, 
+                                    color='red', alpha=0.7,
+                                    rstride=5, cstride=5, shade=True)
+    
 
 if __name__ == '__main__':
     
