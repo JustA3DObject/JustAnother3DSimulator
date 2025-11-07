@@ -432,7 +432,7 @@ def create_interactive_auv():
         ax.set_xlabel('X (m)', fontsize=10)
         ax.set_ylabel('Y (m)', fontsize=10)
         ax.set_zlabel('Z (m)', fontsize=10)
-        ax.set_title('Interactive AUV Control - Keyboard Controls (WXADZC)', fontsize=12)
+        ax.set_title('AUV Control', fontsize=12)
         
         # Set initial view limits
         limit = 3
@@ -491,6 +491,83 @@ def create_interactive_auv():
         surf_tail = ax.plot_surface(X_tail, Y_tail, Z_tail, 
                                     color='red', alpha=0.7,
                                     rstride=5, cstride=5, shade=True)
+        
+        # Transform and plot SSS
+        X_sss1, Y_sss1, Z_sss1 = controller.transform_geometry(
+            *controller.base_geometry['sss1'])
+        X_sss2, Y_sss2, Z_sss2 = controller.transform_geometry(
+            *controller.base_geometry['sss2'])
+        surf_sss1 = ax.plot_surface(X_sss1, Y_sss1, Z_sss1, color='grey', alpha=0.8)
+        surf_sss2 = ax.plot_surface(X_sss2, Y_sss2, Z_sss2, color='grey', alpha=0.8)
+        
+        # Transform and plot DVL
+        dvl_faces_transformed = controller.transform_dvl()
+        dvl_collection = Poly3DCollection(dvl_faces_transformed, facecolors='orange', alpha=0.8)
+        ax.add_collection3d(dvl_collection)
+        
+        # Transform and plot Mast
+        X_mast, Y_mast, Z_mast = controller.transform_geometry(
+            *controller.base_geometry['mast'])
+        surf_mast = ax.plot_surface(X_mast, Y_mast, Z_mast, color='silver', alpha=0.9)
+        
+        # Transform and plot Cage
+        X_cage, Y_cage, Z_cage = controller.transform_geometry(
+            *controller.base_geometry['cage'])
+        surf_cage = ax.plot_surface(X_cage, Y_cage, Z_cage, color='grey', alpha=0.4)
+        
+        # Plot fins
+        transformed_fins = controller.transform_fins()
+        for fin_verts in transformed_fins:
+            fin_col = Poly3DCollection([fin_verts], 
+                                      facecolors='darkslategrey',
+                                      edgecolors='black', alpha=0.9)
+            ax.add_collection3d(fin_col)
+            fin_collections.append(fin_col)
+        
+        # Plot propeller blades
+        for X_b, Y_b, Z_b in controller.base_geometry['prop_blades']:
+            X_prop, Y_prop, Z_prop = controller.transform_geometry(X_b, Y_b, Z_b)
+            prop_surf = ax.plot_surface(X_prop, Y_prop, Z_prop, color='black', alpha=0.9)
+            prop_surfaces.append(prop_surf)
+        
+        # Update camera to follow AUV
+        pos = controller.position
+        offset = 3
+        ax.set_xlim(pos[0] - offset, pos[0] + offset)
+        ax.set_ylim(pos[1] - offset, pos[1] + offset)
+        ax.set_zlim(pos[2] - offset, pos[2] + offset)
+        
+        # Determine throttle status
+        throttle_status = "IDLE"
+        if 'w' in controller.keys_pressed:
+            throttle_status = "FORWARD"
+        elif 'x' in controller.keys_pressed:
+            throttle_status = "BACKWARD"
+        
+        brake_status = "ON" if 'b' in controller.keys_pressed else "OFF"
+        
+        # Update state text
+        state_text.set_text(
+            f"Position: X={pos[0]:.2f}, Y={pos[1]:.2f}, Z={pos[2]:.2f}\n"
+            f"Velocity: {controller.velocity:.2f} m/s (Max: {controller.max_velocity} m/s)\n"
+            f"Orientation: Pitch={np.degrees(controller.orientation[1]):.1f}°, "
+            f"Yaw={np.degrees(controller.orientation[2]):.1f}°\n"
+            f"Throttle: {throttle_status} | Brake: {brake_status}"
+        )
+        
+        return ([surf_nose, surf_mid, surf_tail, surf_sss1, surf_sss2, 
+                surf_mast, surf_cage, dvl_collection] + 
+                fin_collections + prop_surfaces)
+    
+    # Connect keyboard events
+    fig.canvas.mpl_connect('key_press_event', on_key_press)
+    fig.canvas.mpl_connect('key_release_event', on_key_release)
+    
+    # Create animation
+    anim = FuncAnimation(fig, update, init_func=init,
+                        frames=None, interval=50, blit=False)
+    
+    plt.show()
     
 
 if __name__ == '__main__':
