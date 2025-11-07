@@ -19,7 +19,22 @@ class AUVController:
     """Controller to make the AUV interactive"""
     def __init__(self, geometry):
         # Store geometry parameters
-        pass
+        self.geometry = geometry
+
+        # Initialize state vars
+        self.position = np.array([0.0, 0.0, 0.0]) # [x, y ,z]
+        self.orientation = np.array([0.0, 0.0, 0.0]) # [roll, pitch, yaw]
+        # Roll control will not be added because AUVs don't have one.
+
+        # Movement parameters
+        self.velocity = 0.0 # m/s
+        self.max_velocity = 2.0 # m/s
+        self.acceleration = 0.5 # m/s^2
+        self.deceleration = 0.8 # m/s^2
+        self.friction = 0.2 # m/s^2 (Decelerates the AUV and brings it to rest if it has a velocity but no input command)
+        self.angular_speed = 0.03 # rad/s
+        self.dt = 0.05 # s
+
 
 def plot_auv(a, a_offset, c, c_offset, n, d, lf, l, cb_pos, cg_pos):
     """
