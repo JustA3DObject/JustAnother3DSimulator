@@ -350,6 +350,34 @@ class AUVController:
         # Keep yaw in reasonable range
         self.orientation[2] = np.arctan2(np.sin(self.orientation[2]), 
                                          np.cos(self.orientation[2]))
+        
+def create_interactive_auv():
+    """Create interactive AUV with keyboard controls"""
+    
+    # Setup geometry
+    old_L = 1.33
+    old_a = 0.191
+    old_a_offset = 0.0165
+    old_c_offset = 0.0368
+    old_lf = 0.828
+    
+    new_L = REMUS_PARAMS["L"]
+    new_D = REMUS_PARAMS["D"]
+    
+    scale_ratio = new_L / old_L
+    
+    auv_geo = {
+        'a': old_a * scale_ratio,
+        'a_offset': old_a_offset * scale_ratio,
+        'c_offset': old_c_offset * scale_ratio,
+        'n': 2,
+        'd': new_D,
+        'lf': old_lf * scale_ratio,
+        'l': new_L,
+    }
+    
+    # Create controller
+    controller = AUVController(auv_geo)
 
 if __name__ == '__main__':
     
