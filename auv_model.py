@@ -248,6 +248,22 @@ class AUVController:
         Z_new = translated[2].reshape(Z.shape)
 
         return X_new, Y_new, Z_new
+    
+    def transform_fins(self):
+        """Transform fin vertices"""
+        transformed_fins = []
+        R = self.rotation_matrix(*self.orientation)
+        
+        for fin in self.fins:
+            fin_array = np.array(fin)
+            # Apply rotation and translation
+            rotated = (R @ fin_array.T).T
+            translated = rotated + self.position
+            transformed_fins.append(translated)
+        
+        return transformed_fins
+    
+    
 
 if __name__ == '__main__':
     
