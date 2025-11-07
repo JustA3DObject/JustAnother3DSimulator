@@ -289,19 +289,18 @@ class AUVController:
         # Throttle input
         throttle = 0.0
         if 'w' in self.keys_pressed:
-            throttle = 1.0
+            throttle = -1.0  # Full forward (negative X direction)
         elif 'x' in self.keys_pressed:
-            throttle = -1.0
-
-        # Update velocity with acceleratoin or deceleration
-
-        # Brake
+            throttle = 1.0  # Full backward (positive X direction)
+        
+        # Update velocity with acceleration/deceleration
+        # Braking
         if 'b' in self.keys_pressed:
             if self.velocity > 0:
-                self.velocity -= self.deceleration * 2.0* self.dt
+                self.velocity -= self.deceleration * 2.0 * self.dt
                 self.velocity = max(0, self.velocity)
             elif self.velocity < 0:
-                self.velocity += self.deceleration * 2.0 * self.dt 
+                self.velocity += self.deceleration * 2.0 * self.dt
                 self.velocity = min(0, self.velocity)
 
         # Accelerate or decelerate based on throttle
@@ -310,10 +309,12 @@ class AUVController:
             
             # Accelerate/Forward
             if target_velocity > self.velocity:
+                # Accelerating forward
                 self.velocity += self.acceleration * self.dt
                 self.velocity = min(self.velocity, target_velocity, self.max_velocity)
             # Decelerate/Backward
             elif target_velocity < self.velocity:
+                # Decelerating or reversing
                 self.velocity -= self.acceleration * self.dt
                 self.velocity = max(self.velocity, target_velocity, -self.max_velocity * 0.5)
 
@@ -579,7 +580,7 @@ if __name__ == '__main__':
     print("  D - Yaw Right (Turn Right)")
     print("  Z - Pitch Up (Nose Up)")
     print("  C - Pitch Down (Nose Down)")
-    print("  B - Emergency Brake")
+    print("  B - Brake")
     print("  R - Reset Position")
     print("\nMax Velocity: 2.0 m/s")
     print("Forward motion follows the AUV's orientation")
