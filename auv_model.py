@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from auv_parameters import REMUS_PARAMS, PARAMS_DERIVED
+from matplotlib.animation import FuncAnimation
 
 def create_sphere_marker(center, radius, resolution=10):
     """Helper function to create (X, Y, Z) for a sphere surface."""
@@ -13,6 +14,12 @@ def create_sphere_marker(center, radius, resolution=10):
     Y = center[1] + radius * np.outer(np.sin(u), np.sin(v))
     Z = center[2] + radius * np.outer(np.ones(np.size(u)), np.cos(v))
     return X, Y, Z
+
+class AUVController: 
+    """Controller to make the AUV interactive"""
+    def __init__(self, geometry):
+        # Store geometry parameters
+        pass
 
 def plot_auv(a, a_offset, c, c_offset, n, d, lf, l, cb_pos, cg_pos):
     """
