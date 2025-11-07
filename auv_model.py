@@ -234,6 +234,20 @@ class AUVController:
 
         # Combined rotation: Rz * Ry * Rx
         return Rz @ Ry @ Rx
+    
+    def transform_geometry(self, X, Y, Z):
+        """Apply current position and orientation to geometry"""
+
+        points = np.stack([X.flatten(), Y.flatten(), Z.flatten()])
+        R = self.rotation_matrix(*self.orientation)
+        rotated = R @ points
+        translated = rotated + self.position.reshape(3, 1)
+
+        X_new = translated[0].reshape(X.shape)
+        Y_new = translated[1].reshape(Y.shape)
+        Z_new = translated[2].reshape(Z.shape)
+
+        return X_new, Y_new, Z_new
 
 if __name__ == '__main__':
     
