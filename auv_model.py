@@ -275,6 +275,62 @@ class AUVController:
             transformed_faces.append(translated)
         
         return transformed_faces    
+    
+    def update_state(self):
+        """Update the state of the AUV by keyboard inputs"""
+
+        # Reset the position
+        if 'r' in self.keys_pressed:
+            self.position = np.array([0.0, 0.0, 0.0])
+            self.orientation = np.array([0.0, 0.0, 0.0])
+            self.velocity = 0.0
+            return
+        
+        # Throttle input
+        throttle = 0.0
+        if 'w' in self.keys_pressed:
+            throttle = 1.0
+        elif 'x' in self.keys_pressed:
+            throttle = -1.0
+
+        # Update velocity with acceleratoin or deceleration
+
+        # Brake
+        if 'b' in self.keys_pressed:
+            if self.velocity > 0:
+                self.velocity -= self.deceleration * 2.0* self.dt
+                self.velocity = max(0, self.velocity)
+            elif self.velocity < 0:
+                self.velocity += self.deceleration * 2.0 * self.dt 
+                self.velocity = min(0, self.velocity)
+
+        # Accelerate or decelerate based on throttle
+        elif abs(throttle) > 0.01:
+            target_velocity = throttle * self.max_velocity
+            
+            # Accelerate/Forward
+            if target_velocity > self.velocity:
+                self.velocity += self.acceleration * self.dt
+                self.velocity = min(self.velocity, target_velocity, self.max_velocity)
+            # Decelerate/Backward
+            elif target_velocity < self.velocity:
+                self.velocity -= self.acceleration * self.dt
+                self.velocity = max(self.velocity, target_velocity, -self.max_velocity * 0.5)
+
+        # Natural friction/drag
+        else:
+            if self.velocity > 0:
+                self.velocity -= self.friction * self.dt
+                self.velocity = max(0, self.velocity)
+            elif self.velocity < 0:
+                self.velocity += self.friction * self.dt
+                self.velocity = min(0, self.velocity)
+
+        
+
+
+
+
 
 
 if __name__ == '__main__':
