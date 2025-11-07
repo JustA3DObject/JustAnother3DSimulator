@@ -326,12 +326,30 @@ class AUVController:
                 self.velocity += self.friction * self.dt
                 self.velocity = min(0, self.velocity)
 
+        # Update position based on velocity
+        R = self.rotation_matrix(*self.orientation)
+        forward_vec = R @ np.array([1, 0, 0])
+        self.position += forward_vec * self.velocity * self.dt
         
-
-
-
-
-
+        # Update orientation based on keyboard input
+        # Yaw (A/D keys)
+        if 'a' in self.keys_pressed:
+            self.orientation[2] += self.angular_speed  # Yaw left
+        if 'd' in self.keys_pressed:
+            self.orientation[2] -= self.angular_speed  # Yaw right
+        
+        # Pitch (Z/C keys)
+        if 'z' in self.keys_pressed:
+            self.orientation[1] += self.angular_speed  # Pitch up
+        if 'c' in self.keys_pressed:
+            self.orientation[1] -= self.angular_speed  # Pitch down
+        
+        # Clamp pitch to avoid gimbal lock
+        self.orientation[1] = np.clip(self.orientation[1], -np.pi/2 + 0.1, np.pi/2 - 0.1)
+        
+        # Keep yaw in reasonable range
+        self.orientation[2] = np.arctan2(np.sin(self.orientation[2]), 
+                                         np.cos(self.orientation[2]))
 
 if __name__ == '__main__':
     
