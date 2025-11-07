@@ -378,6 +378,45 @@ def create_interactive_auv():
     
     # Create controller
     controller = AUVController(auv_geo)
+    
+    # Setup figure
+    fig = plt.figure(figsize=(14, 10))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # Store surface objects
+    surf_nose = None
+    surf_mid = None
+    surf_tail = None
+    surf_sss1 = None
+    surf_sss2 = None
+    surf_mast = None
+    surf_cage = None
+    dvl_collection = None
+    fin_collections = []
+    prop_surfaces = []
+    
+    # Control instructions
+    instructions = (
+        "KEYBOARD CONTROLS:\n"
+        "W - Throttle Forward\n"
+        "X - Throttle Backward\n"
+        "A - Yaw Left | D - Yaw Right\n"
+        "Z - Pitch Up | C - Pitch Down\n"
+        "B - Emergency Brake\n"
+        "R - Reset Position\n"
+        "Max Speed: 2 m/s"
+    )
+    
+    # Add text for instructions
+    fig.text(0.02, 0.98, instructions, transform=fig.transFigure,
+             fontsize=10, verticalalignment='top', family='monospace',
+             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    
+    # State display
+    state_text = ax.text2D(0.02, 0.02, '', transform=ax.transAxes,
+                           fontsize=9, family='monospace',
+                           bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
+    
 
 if __name__ == '__main__':
     
