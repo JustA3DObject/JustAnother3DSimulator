@@ -208,6 +208,33 @@ class AUVController:
         }
         self.fins = fin_verts
 
+    def rotation_matrix(self, roll, pitch, yaw):
+        """Create rotation matrix from Euler angles (ZYX convention)"""
+
+        # Rotation around x-axis (roll)
+        Rx = np.array([
+            [1, 0, 0],
+            [0, np.cos(roll), -np.sin(roll)],
+            [0, np.sin(roll), np.cos(roll)]
+        ])
+
+        # Rotation around y-axis (pitch)
+        Ry = np.array([
+            [np.cos(pitch), 0, np.sin(pitch)],
+            [0, 1, 0],
+            [-np.sin(pitch), 0, np.cos(pitch)]
+        ])
+
+        # Rotation around z-axis (yaw)
+        Rz = np.array([
+            [np.cos(yaw), -np.sin(yaw), 0],
+            [np.sin(yaw), np.cos(yaw), 0],
+            [0, 0, 1]
+        ])
+
+        # Combined rotation: Rz * Ry * Rx
+        return Rz @ Ry @ Rx
+
 if __name__ == '__main__':
     
     old_L = 1.33
