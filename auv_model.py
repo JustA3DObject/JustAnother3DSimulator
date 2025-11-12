@@ -62,9 +62,7 @@ class AUVController:
         num_theta_points = 80
         theta = np.linspace(0, 2 * np.pi, num_theta_points)
         z_offset = 0.001
-        
-        # === 1. Create Geometry Relative to Nose ===
-        
+                
         # NOSE SECTION (Elipsoid)
         x_nose = np.linspace(0, geo['a'], num_x_points)
         r_nose = r_max - (r_max - geo['a_offset']) * (1 - x_nose / geo['a'])**geo['n']
@@ -207,9 +205,7 @@ class AUVController:
         Y_cage = cage_radius * np.cos(TH_cage)
         Z_cage = cage_radius * np.sin(TH_cage)
         
-        
-        # === 2. Re-center All Geometry around COM ===
-        # self.com_vec_from_nose contains (x_cg, y_cg, z_cg) relative to nose
+                # self.com_vec_from_nose contains (x_cg, y_cg, z_cg) relative to nose
         com_x, com_y, com_z = self.com_vec_from_nose
 
         # Re-center hull sections
@@ -251,7 +247,7 @@ class AUVController:
             fin_array_recentered = np.array(fin) - self.com_vec_from_nose
             fin_verts_recentered.append(fin_array_recentered)
 
-        # === 3. Store COM-Centered Geometry ===
+        # Store Geometry
         
         self.base_geometry = {
             'nose': (X_nose, Y_nose, Z_nose),
@@ -618,7 +614,6 @@ def create_interactive_auv():
         
         brake_status = "ON" if 'b' in controller.keys_pressed else "OFF"
         
-        # === THIS IS THE FIX ===
         # Update state text
         # We use abs(controller.velocity) to show speed as a positive number
         state_text.set_text(
@@ -628,7 +623,6 @@ def create_interactive_auv():
             f"Yaw={np.degrees(controller.orientation[2]):.1f}°\n"
             f"Throttle: {throttle_status} | Brake: {brake_status}"
         )
-        # === END OF FIX ===
         
         return ([surf_nose, surf_mid, surf_tail, surf_sss1, surf_sss2, 
                 surf_mast, surf_cage, dvl_collection] + 
@@ -646,7 +640,7 @@ def create_interactive_auv():
     
 
 if __name__ == '__main__':
-    print("AUV Simulator - Keyboard Mode (COM-Centered)")
+    print("AUV Simulator - Keyboard Mode")
     print("\nControls:")
     print("  W - Accelerate Forward")
     print("  X - Accelerate Backward")
@@ -657,6 +651,4 @@ if __name__ == '__main__':
     print("  B - Brake")
     print("  R - Reset Position")
     print("\nMax Velocity: 2.0 m/s")
-    print("Forward motion follows the AUV's orientation")
-    print("Rotation is now centered at the Center of Mass (COM).")
     create_interactive_auv()
