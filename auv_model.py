@@ -28,18 +28,21 @@ class AUVController:
 
         # Initialize state vars
         # self.position now represents the world coordinates of the COM
-        self.position = np.array([0.0, 0.0, 0.0]) # [x, y ,z]
+        self.position = np.array([0.0, 0.0, -5.0]) # [x, y ,z] - Start 5m deep
         # self.orientation is the rotation around the COM
         self.orientation = np.array([0.0, 0.0, 0.0]) # [roll, pitch, yaw]
         # Roll control will not be added because AUVs don't have one.
 
         # Movement parameters
-        self.velocity = 0.0 # m/s
+        self.velocity = 0.0 # m/s (Surge velocity)
         self.max_velocity = 2.0 # m/s
         self.acceleration = 0.5 # m/s^2
         self.deceleration = 0.8 # m/s^2
         self.friction = 0.2 # m/s^2 (Decelerates the AUV and brings it to rest if it has a velocity but no input command)
-        self.angular_speed = 0.03 # rad/s
+        
+        self.max_angular_speed = 0.05 # rad/s (Max turn rate at full speed)
+        self.buoyancy_rate = 0.1 # m/s (Constant upward floating speed)
+        
         self.dt = 0.05 # s
 
         # Key tracking
@@ -340,19 +343,18 @@ class AUVController:
 
         # Reset the position
         if 'r' in self.keys_pressed:
-            self.position = np.array([0.0, 0.0, 0.0])
+            self.position = np.array([0.0, 0.0, -5.0]) # Reset to 5m deep
             self.orientation = np.array([0.0, 0.0, 0.0])
             self.velocity = 0.0
             return
         
-        # Throttle input
+        # Surge Velocity (Throttle)
         throttle = 0.0
         if 'w' in self.keys_pressed:
             throttle = -1.0  # Full forward (Negative X-direction)
         elif 'x' in self.keys_pressed:
             throttle = 1.0  # Full backward (Positive X-direction)
         
-        # Update velocity with acceleration/deceleration
         # Braking
         if 'b' in self.keys_pressed:
             if self.velocity > 0:
@@ -393,22 +395,32 @@ class AUVController:
         R = self.rotation_matrix(*self.orientation)
         # Body-frame X-axis is the forward direction
         forward_vec = R @ np.array([1, 0, 0])
-        # self.position is the COM, so we update it directly
-        # A negative velocity (from 'w') will move it in the -X direction
         self.position += forward_vec * self.velocity * self.dt
         
-        # Update orientation based on keyboard input
-        # Yaw (A/D keys)
-        if 'a' in self.keys_pressed:
-            self.orientation[2] += self.angular_speed  # Yaw left
-        if 'd' in self.keys_pressed:
-            self.orientation[2] -= self.angular_speed  # Yaw right
+        # Update Position (Buoyancy) & Check Surface
+        # Apply constant upward buoyancy force
+        self.position[2] += self.buoyancy_rate * self.dt
+        # Clamp at the surface (Z=0)
+        self.position[2] = min(self.position[2], 0.0)
+
+        # Update Orientation (Pitch & Yaw)
         
-        # Pitch (Z/C keys)
+        # Calculate effective turning rate based on speed
+        # No speed = no turning (rudders/fins need flow)
+        speed_ratio = np.clip(abs(self.velocity) / self.max_velocity, 0.0, 1.0)
+        effective_angular_speed = self.max_angular_speed * speed_ratio
+
+        # Yaw (A/D keys) - Only works if moving
+        if 'a' in self.keys_pressed:
+            self.orientation[2] += effective_angular_speed  # Yaw left
+        if 'd' in self.keys_pressed:
+            self.orientation[2] -= effective_angular_speed  # Yaw right
+        
+        # Pitch (Z/C keys) - Only works if moving
         if 'z' in self.keys_pressed:
-            self.orientation[1] += self.angular_speed  # Pitch up
+            self.orientation[1] += effective_angular_speed  # Pitch up
         if 'c' in self.keys_pressed:
-            self.orientation[1] -= self.angular_speed  # Pitch down
+            self.orientation[1] -= effective_angular_speed  # Pitch down
         
         # Clamp pitch to avoid gimbal lock
         self.orientation[1] = np.clip(self.orientation[1], -np.pi/2 + 0.1, np.pi/2 - 0.1)
@@ -471,7 +483,7 @@ def create_interactive_auv():
         "Z - Pitch Up | C - Pitch Down\n"
         "B - Emergency Brake\n"
         "R - Reset Position\n"
-        "Max Speed: 2 m/s"
+        "Max Speed: 2 m/s\n"
     )
     
     # Add text for instructions
@@ -503,9 +515,10 @@ def create_interactive_auv():
         
         # Set initial view limits
         limit = 3
-        ax.set_xlim(-limit, limit)
-        ax.set_ylim(-limit, limit)
-        ax.set_zlim(-limit, limit)
+        pos = controller.position
+        ax.set_xlim(pos[0] - limit, pos[0] + limit)
+        ax.set_ylim(pos[1] - limit, pos[1] + limit)
+        ax.set_zlim(pos[2] - limit, pos[2] + limit)
         
         return []
     
@@ -615,9 +628,8 @@ def create_interactive_auv():
         brake_status = "ON" if 'b' in controller.keys_pressed else "OFF"
         
         # Update state text
-        # We use abs(controller.velocity) to show speed as a positive number
         state_text.set_text(
-            f"COM Position: X={pos[0]:.2f}, Y={pos[1]:.2f}, Z={pos[2]:.2f}\n"
+            f"COM Position: X={pos[0]:.2f}, Y={pos[1]:.2f}, Z(Depth)={pos[2]:.2f}\n"
             f"Speed: {abs(controller.velocity):.2f} m/s (Max: {controller.max_velocity} m/s)\n"
             f"Orientation: Pitch={np.degrees(controller.orientation[1]):.1f}°, "
             f"Yaw={np.degrees(controller.orientation[2]):.1f}°\n"
