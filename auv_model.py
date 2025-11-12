@@ -54,6 +54,20 @@ def jacobian(eta):
     J[3:6, 3:6] = J2
     return J
 
+class AUVPhysicsModel:
+    """Implements the 6-DOF dyamic model for the AUV"""
+
+    def __init__(self):
+        # Load physical and hydrodynamic parameters
+        self.params = {**REMUS_PARAMS, **HYDRO_PARAMS}
+
+        # State vectors
+        # eta: [x, y, z, phi, theta, psi] (World frame position and orientation)
+        self.eta = np.zeros((6, 1))
+        self.eta[2] = -5.0 # Start at 5 meter under water
+        # nu: [u, v, w, p, q, r] (Body frame linear and angular velocities)
+        self.nu = np.zeros((6, 1))
+
 class AUVController: 
     """Controller to make the AUV interactive"""
     def __init__(self, geometry):
