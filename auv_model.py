@@ -68,6 +68,49 @@ class AUVPhysicsModel:
         # nu: [u, v, w, p, q, r] (Body frame linear and angular velocities)
         self.nu = np.zeros((6, 1))
 
+        # Physical constants 
+        self.m = self.params['m']
+        self.L = self.params['L']
+        self.W = self.params['W']
+        self.B = self.params['B']
+        self.g = 9.81 # m/s^2
+
+        # Body frame vectors 
+        # Vector from origin to CB
+        self.r_b = np.array([0., 0., 0.])
+
+        # CB position relative to nose
+        r_b_vec_nose = np.array(PARAMS_DERIVED["cb_pos"])
+
+        # CG position relative to nose
+        r_g_vec_nose = np.array(PARAMS_DERIVED["cg_pos"])
+
+        # Vector from origin to CG
+        self.r_g = (r_g_vec_nose - r_b_vec_nose).reshape(3, 1)
+
+        # Inertia tensor (assumed to be about CB)
+        self.I_o = np.diag([
+            self.params['Ixx'],
+            self.params['Iyy'],
+            self.params['Izz']
+        ])
+
+        # System matrices 
+        self.build_mass_matrices()
+        self.build_damping_matrices()
+
+        # Control limits 
+        self.MAX_THRUST = 40.0 # Newtons (approx 4 kg force)
+        self.MAX_RUDDER_ANGLE = np.radians(20) # rad
+        self.MAX_STERN_ANGLE = np.radians(20) # rad
+
+    def build_mass_matrices(self):
+        pass
+    
+    def build_damping_matrices(self):
+        pass
+        
+
 class AUVController: 
     """Controller to make the AUV interactive"""
     def __init__(self, geometry):
