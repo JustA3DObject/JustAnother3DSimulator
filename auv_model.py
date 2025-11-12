@@ -21,8 +21,15 @@ class AUVController:
         # Store geometry parameters
         self.geometry = geometry
 
+        # Get the Center of Mass (COM) position relative to the nose (from auv_parameters.py)
+        # This is the vector we need to subtract from all geometry
+        # to re-center the model around the COM.
+        self.com_vec_from_nose = np.array(PARAMS_DERIVED["cg_pos"])
+
         # Initialize state vars
+        # self.position now represents the world coordinates of the COM
         self.position = np.array([0.0, 0.0, 0.0]) # [x, y ,z]
+        # self.orientation is the rotation around the COM
         self.orientation = np.array([0.0, 0.0, 0.0]) # [roll, pitch, yaw]
         # Roll control will not be added because AUVs don't have one.
 
@@ -38,12 +45,16 @@ class AUVController:
         # Key tracking
         self.keys_pressed = set()
 
-        # Generating geometry
+        # Generating geometry (this will now use self.com_vec_from_nose)
         self.generate_base_geometry()
 
 
     def generate_base_geometry(self):
-        """Generate the AUV geometry"""
+        """
+        Generate the AUV geometry.
+        All geometry is first created relative to the nose (x=0),
+        then shifted so the origin (0,0,0) is at the Center of Mass.
+        """
         geo = self.geometry
         
         r_max = geo['d'] / 2
@@ -51,6 +62,8 @@ class AUVController:
         num_theta_points = 80
         theta = np.linspace(0, 2 * np.pi, num_theta_points)
         z_offset = 0.001
+        
+        # === 1. Create Geometry Relative to Nose ===
         
         # NOSE SECTION (Elipsoid)
         x_nose = np.linspace(0, geo['a'], num_x_points)
@@ -194,19 +207,64 @@ class AUVController:
         Y_cage = cage_radius * np.cos(TH_cage)
         Z_cage = cage_radius * np.sin(TH_cage)
         
-        # Store all geometry
+        
+        # === 2. Re-center All Geometry around COM ===
+        # self.com_vec_from_nose contains (x_cg, y_cg, z_cg) relative to nose
+        com_x, com_y, com_z = self.com_vec_from_nose
+
+        # Re-center hull sections
+        X_nose -= com_x; Y_nose -= com_y; Z_nose -= com_z
+        X_mid  -= com_x; Y_mid  -= com_y; Z_mid  -= com_z
+        X_tail -= com_x; Y_tail -= com_y; Z_tail -= com_z
+        
+        # Re-center SSS patches
+        X_sss1 -= com_x; Y_sss1 -= com_y; Z_sss1 -= com_z
+        X_sss2 -= com_x; Y_sss2 -= com_y; Z_sss2 -= com_z
+        
+        # Re-center DVL faces (by re-centering the 'v' vertices)
+        v_recentered = v - self.com_vec_from_nose
+        dvl_faces_recentered = [
+            [v_recentered[0], v_recentered[1], v_recentered[2], v_recentered[3]], 
+            [v_recentered[4], v_recentered[5], v_recentered[6], v_recentered[7]], 
+            [v_recentered[0], v_recentered[1], v_recentered[5], v_recentered[4]],
+            [v_recentered[2], v_recentered[3], v_recentered[7], v_recentered[6]], 
+            [v_recentered[0], v_recentered[3], v_recentered[7], v_recentered[4]], 
+            [v_recentered[1], v_recentered[2], v_recentered[6], v_recentered[5]]
+        ]
+
+        # Re-center Mast
+        X_mast -= com_x; Y_mast -= com_y; Z_mast -= com_z
+
+        # Re-center Propeller Blades
+        prop_blades_recentered = []
+        for (X_b, Y_b, Z_b) in prop_blades:
+            prop_blades_recentered.append((
+                X_b - com_x, Y_b - com_y, Z_b - com_z
+            ))
+
+        # Re-center Cage
+        X_cage -= com_x; Y_cage -= com_y; Z_cage -= com_z
+
+        # Re-center Fins
+        fin_verts_recentered = []
+        for fin in fin_verts:
+            fin_array_recentered = np.array(fin) - self.com_vec_from_nose
+            fin_verts_recentered.append(fin_array_recentered)
+
+        # === 3. Store COM-Centered Geometry ===
+        
         self.base_geometry = {
             'nose': (X_nose, Y_nose, Z_nose),
             'mid': (X_mid, Y_mid, Z_mid),
             'tail': (X_tail, Y_tail, Z_tail),
             'sss1': (X_sss1, Y_sss1, Z_sss1),
             'sss2': (X_sss2, Y_sss2, Z_sss2),
-            'dvl_faces': dvl_faces,
+            'dvl_faces': dvl_faces_recentered, # Use recentered version
             'mast': (X_mast, Y_mast, Z_mast),
             'cage': (X_cage, Y_cage, Z_cage),
-            'prop_blades': prop_blades,
+            'prop_blades': prop_blades_recentered, # Use recentered version
         }
-        self.fins = fin_verts
+        self.fins = fin_verts_recentered # Use recentered version
 
     def rotation_matrix(self, roll, pitch, yaw):
         """Create rotation matrix from Euler angles (ZYX convention)"""
@@ -236,11 +294,16 @@ class AUVController:
         return Rz @ Ry @ Rx
     
     def transform_geometry(self, X, Y, Z):
-        """Apply current position and orientation to geometry"""
+        """
+        Apply current position and orientation to COM-centered geometry.
+        The base geometry (X,Y,Z) is already relative to the COM.
+        """
 
         points = np.stack([X.flatten(), Y.flatten(), Z.flatten()])
+        # R rotates points around the COM (the origin 0,0,0 of the body frame)
         R = self.rotation_matrix(*self.orientation)
         rotated = R @ points
+        # self.position is the world coordinate of the COM, so we add it
         translated = rotated + self.position.reshape(3, 1)
 
         X_new = translated[0].reshape(X.shape)
@@ -250,13 +313,12 @@ class AUVController:
         return X_new, Y_new, Z_new
     
     def transform_fins(self):
-        """Transform fin vertices"""
+        """Transform fin vertices (which are COM-centered)"""
         transformed_fins = []
         R = self.rotation_matrix(*self.orientation)
         
-        for fin in self.fins:
-            fin_array = np.array(fin)
-            # Apply rotation and translation
+        for fin_array in self.fins:
+            # Apply rotation around COM and translate to world position
             rotated = (R @ fin_array.T).T
             translated = rotated + self.position
             transformed_fins.append(translated)
@@ -264,12 +326,13 @@ class AUVController:
         return transformed_fins
     
     def transform_dvl(self):
-        """Transform DVL box"""
+        """Transform DVL box (which is COM-centered)"""
         R = self.rotation_matrix(*self.orientation)
         transformed_faces = []
         
         for face in self.base_geometry['dvl_faces']:
             face_array = np.array(face)
+            # Apply rotation around COM and translate to world position
             rotated = (R @ face_array.T).T
             translated = rotated + self.position
             transformed_faces.append(translated)
@@ -289,9 +352,9 @@ class AUVController:
         # Throttle input
         throttle = 0.0
         if 'w' in self.keys_pressed:
-            throttle = -1.0  # Full forward (negative X direction)
+            throttle = -1.0  # Full forward (Negative X-direction)
         elif 'x' in self.keys_pressed:
-            throttle = 1.0  # Full backward (positive X direction)
+            throttle = 1.0  # Full backward (Positive X-direction)
         
         # Update velocity with acceleration/deceleration
         # Braking
@@ -305,18 +368,20 @@ class AUVController:
 
         # Accelerate or decelerate based on throttle
         elif abs(throttle) > 0.01:
-            target_velocity = throttle * self.max_velocity
+            # Note: Max reverse speed is half of max forward
+            if throttle < 0:
+                 target_velocity = throttle * self.max_velocity
+            else:
+                 target_velocity = throttle * self.max_velocity * 0.5
             
-            # Accelerate/Forward
-            if target_velocity > self.velocity:
-                # Accelerating forward
-                self.velocity += self.acceleration * self.dt
-                self.velocity = min(self.velocity, target_velocity, self.max_velocity)
-            # Decelerate/Backward
-            elif target_velocity < self.velocity:
-                # Decelerating or reversing
+            # Accelerate/Forward (velocity becomes more negative)
+            if target_velocity < self.velocity:
                 self.velocity -= self.acceleration * self.dt
-                self.velocity = max(self.velocity, target_velocity, -self.max_velocity * 0.5)
+                self.velocity = max(self.velocity, target_velocity, -self.max_velocity)
+            # Decelerate/Backward (velocity becomes more positive)
+            elif target_velocity > self.velocity:
+                self.velocity += self.acceleration * self.dt
+                self.velocity = min(self.velocity, target_velocity, self.max_velocity * 0.5)
 
         # Natural friction/drag
         else:
@@ -328,8 +393,12 @@ class AUVController:
                 self.velocity = min(0, self.velocity)
 
         # Update position based on velocity
+        # self.orientation is (roll, pitch, yaw) around the COM
         R = self.rotation_matrix(*self.orientation)
+        # Body-frame X-axis is the forward direction
         forward_vec = R @ np.array([1, 0, 0])
+        # self.position is the COM, so we update it directly
+        # A negative velocity (from 'w') will move it in the -X direction
         self.position += forward_vec * self.velocity * self.dt
         
         # Update orientation based on keyboard input
@@ -378,6 +447,7 @@ def create_interactive_auv():
     }
     
     # Create controller
+    # This will now automatically set up the COM-centered geometry
     controller = AUVController(auv_geo)
     
     # Setup figure
@@ -433,7 +503,7 @@ def create_interactive_auv():
         ax.set_xlabel('X (m)', fontsize=10)
         ax.set_ylabel('Y (m)', fontsize=10)
         ax.set_zlabel('Z (m)', fontsize=10)
-        ax.set_title('AUV Simulator', fontsize=12)
+        ax.set_title('AUV Simulator (COM-Centered)', fontsize=12)
         
         # Set initial view limits
         limit = 3
@@ -476,6 +546,7 @@ def create_interactive_auv():
         prop_surfaces.clear()
         
         # Transform and plot main hull geometry
+        # These are now COM-centered
         X_nose, Y_nose, Z_nose = controller.transform_geometry(
             *controller.base_geometry['nose'])
         X_mid, Y_mid, Z_mid = controller.transform_geometry(
@@ -531,7 +602,7 @@ def create_interactive_auv():
             prop_surf = ax.plot_surface(X_prop, Y_prop, Z_prop, color='black', alpha=0.9)
             prop_surfaces.append(prop_surf)
         
-        # Update camera to follow AUV
+        # Update camera to follow AUV's COM
         pos = controller.position
         offset = 3
         ax.set_xlim(pos[0] - offset, pos[0] + offset)
@@ -547,14 +618,17 @@ def create_interactive_auv():
         
         brake_status = "ON" if 'b' in controller.keys_pressed else "OFF"
         
+        # === THIS IS THE FIX ===
         # Update state text
+        # We use abs(controller.velocity) to show speed as a positive number
         state_text.set_text(
-            f"Position: X={pos[0]:.2f}, Y={pos[1]:.2f}, Z={pos[2]:.2f}\n"
-            f"Velocity: {controller.velocity:.2f} m/s (Max: {controller.max_velocity} m/s)\n"
+            f"COM Position: X={pos[0]:.2f}, Y={pos[1]:.2f}, Z={pos[2]:.2f}\n"
+            f"Speed: {abs(controller.velocity):.2f} m/s (Max: {controller.max_velocity} m/s)\n"
             f"Orientation: Pitch={np.degrees(controller.orientation[1]):.1f}°, "
             f"Yaw={np.degrees(controller.orientation[2]):.1f}°\n"
             f"Throttle: {throttle_status} | Brake: {brake_status}"
         )
+        # === END OF FIX ===
         
         return ([surf_nose, surf_mid, surf_tail, surf_sss1, surf_sss2, 
                 surf_mast, surf_cage, dvl_collection] + 
@@ -572,7 +646,7 @@ def create_interactive_auv():
     
 
 if __name__ == '__main__':
-    print("AUV Simulator - Keyboard Mode")
+    print("AUV Simulator - Keyboard Mode (COM-Centered)")
     print("\nControls:")
     print("  W - Accelerate Forward")
     print("  X - Accelerate Backward")
@@ -584,4 +658,5 @@ if __name__ == '__main__':
     print("  R - Reset Position")
     print("\nMax Velocity: 2.0 m/s")
     print("Forward motion follows the AUV's orientation")
+    print("Rotation is now centered at the Center of Mass (COM).")
     create_interactive_auv()
