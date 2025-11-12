@@ -105,10 +105,42 @@ class AUVPhysicsModel:
         self.MAX_STERN_ANGLE = np.radians(20) # rad
 
     def build_mass_matrices(self):
-        pass
+        """ Builds the M_RB and R_A matrices based on CB origin"""
+        m = self.m
+
+        # Rigid body mass matrix (M_RB)
+        # M_RB = [m*I, -m*S(r_g)]
+        #        [m*S(r_g), I_o]
+        S_rg = skew(self.r_g.flatten())
+
+        self.M_RB = np.zeros((6, 6))
+        self.M_RB[0:3, 0:3] = np.diag([m, m, m])
+        self.M_RB[0:3, 3:6] = -m * S_rg
+        self.M_RB[3:6, 0:3] = m * S_rg
+        self.M_RB[3:6, 3:6] = self.I_o
+
+        # Added mass matrix (M_A)
+        self.M_A = np.diag([
+            -self.params['Xu_dot'],
+            -self.params['Yv_dot'],
+            -self.params['Zw_dot'],
+            -self.params['Kp_dot'],
+            -self.params['Mq_dot'],
+            -self.params['Nr_dot']
+        ])
+
+        # Off-diagonal added mass terms
+        self.M_A[1, 5] = self.M_A[5, 1] = -self.params.get('Y_r_dot', 0)
+        self.M_A[2, 4] = self.M_A[4, 2] = -self.params.get('Z_q_dot', 0)
+        self.M_A[4, 2] = self.M_A[2, 4] = -self.params.get('M_w_dot', 0)
+        self.M_A[5, 1] = self.M_A[1, 5] = -self.params.get('N_v_dot', 0)
+        
+        # Total Mass Matrix
+        self.M = self.M_RB + self.M_A
+        self.M_inv = inv(self.M)
     
     def build_damping_matrices(self):
-        pass
+        """ Builds the linear and quadratic damping matrices"""
         
 
 class AUVController: 
