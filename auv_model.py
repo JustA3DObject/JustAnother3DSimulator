@@ -4,6 +4,10 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from auv_parameters import REMUS_PARAMS, PARAMS_DERIVED
 from matplotlib.animation import FuncAnimation
+from auv_hydrodynamic_parameters import HYDRO_PARAMS
+from numpy.linalg import inv
+
+# Helper Functions
 
 def create_sphere_marker(center, radius, resolution=10):
     """Helper function to create (X, Y, Z) for a sphere surface."""
@@ -14,6 +18,41 @@ def create_sphere_marker(center, radius, resolution=10):
     Y = center[1] + radius * np.outer(np.sin(u), np.sin(v))
     Z = center[2] + radius * np.outer(np.ones(np.size(u)), np.cos(v))
     return X, Y, Z
+
+def skew(v):
+    """Converts a 3-element vector to a 3x3 skew-symmetric matrix."""
+    return np.array([
+        [0, -v[2], v[1]],
+        [v[2], 0, -v[0]],
+        [-v[1], v[0], 0]
+    ])
+
+def jacobian(eta):
+    """Computes the 6-DOF Jacobian matrix J(eta)."""
+    phi, theta, psi = eta[3:6].flatten()
+    
+    cphi, sphi = np.cos(phi), np.sin(phi)
+    cth, sth = np.cos(theta), np.sin(theta)
+    cpsi, spsi = np.cos(psi), np.sin(psi)
+    
+    # J1 (Linear)
+    
+    J1 = np.array([
+        [cpsi*cth, -spsi*cphi + cpsi*sth*sphi, spsi*sphi + cpsi*sth*cphi],
+        [spsi*cth, cpsi*cphi + spsi*sth*sphi, -cpsi*sphi + spsi*sth*cphi],
+        [-sth, cth*sphi, cth*cphi]
+    ])
+    # J2 (Angular)
+    J2 = np.array([
+        [1, sphi*np.tan(theta), cphi*np.tan(theta)],
+        [0, cphi, -sphi],
+        [0, sphi/cth, cphi/cth]
+    ])
+    
+    J = np.zeros((6, 6))
+    J[0:3, 0:3] = J1
+    J[3:6, 3:6] = J2
+    return J
 
 class AUVController: 
     """Controller to make the AUV interactive"""
