@@ -141,7 +141,26 @@ class AUVPhysicsModel:
     
     def build_damping_matrices(self):
         """ Builds the linear and quadratic damping matrices"""
-        
+
+        # Linear damping (D_lin)
+        self.D_lin = -np.diag([
+            self.params['Xu'],
+            self.params['Yv'],
+            self.params['Zw'],
+            self.params['Kp'],
+            self.params['Mq'],
+            self.params['Nr']
+        ])        
+
+        # Quadratic damping (Dn) - Store coefficients
+        self.D_quad_coeffs = -np.diag([
+            self.params['X_u|u'],
+            self.params['Y_v|v'],
+            self.params['Z_w|w'],
+            self.params['K_p|p'],
+            self.params['M_q|q'],
+            self.params['N_r|r']
+        ])
 
 class AUVController: 
     """Controller to make the AUV interactive"""
