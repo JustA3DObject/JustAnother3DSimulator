@@ -169,7 +169,7 @@ class AUVPhysicsModel:
         self.eta[2] = -5.0 # Reset to 5 meter depth
         self.nu = np.zeros((6, 1))
 
-    def calculate_hydostatics(self, eta):
+    def calculate_hydrostatics(self, eta):
         """ Calculates g(eta) - restorig forces (gravity, bouyancy)"""
         phi, theta, psi = eta[3:6].flatten()
 
@@ -287,6 +287,52 @@ class AUVPhysicsModel:
             [N_rudder]
         ])
         return tau_control
+    
+    def step(self, dt, control_cmds):
+        """ Advances the simulation by one time step dt
+        M*nu_dot + C(nu)*nu + D(nu)*nu + g(eta) = tau
+        """
+        #Calculate all forces and moments in the body frame 
+        tau_G = self.calculate_hydrostatics(self.eta)
+        tau_D = self.calculate_damping(self.nu)
+        tau_C  = self.calculate_coriolis(self.nu)
+        tau_ctrl = self.calculate_control_forces(self.nu, control_cmds)
+        
+        # Sum all forces
+        # Use -g, -D, -C because they are on LHS of the equation
+        tau_total =  tau_ctrl - tau_G - tau_D - tau_C
+
+        # Solve for acceleration (nu_dot = M_inv * tau_total)
+        nu_dot = self.M_inv @ tau_total
+
+        # Solve for acceleration (nu_dot = M_inv * tau_total)
+        nu_dot = self.M_inv @ tau_total
+        
+        # Integrate for acceleration (Euler step)
+        self.nu = self.nu + nu_dot * dt
+
+        # Transform body velocities to world frame velocities 
+        # Handle gimble lock at +/- 90 deg pitch
+        theta = self.eta[4, 0]
+        if abs(np.cos(theta)) < 1e-6:
+            self.eta[4, 0] = np.sign(theta) * (np.pi/2 - 1e-3) # nudge
+
+        J = jacobian(self.eta)
+        eta_dot = J @ self.nu
+
+        # Integrate position
+        self.eta = self.eta + eta_dot * dt
+
+        # Surface interaction
+        # Prevent AUV from going above the water (Z=0)
+        if self.eta[2, 0] > 0:
+            self.eta[2, 0] = 0
+            # Stop any upward body frame velocity
+            if self.nu[2, 0] < 0:
+                self.nu[2, 0] = 0
+            # Stop any upward world frame velocity
+            if eta_dot[2, 0] > 0:
+                self.nu = inv(J) @ np.array([eta_dot[0,0], eta_dot[1,0], 0, eta_dot[3,0], eta_dot[4,0], eta_dot[5,0]]).reshape(6,1)
 
 class AUVController: 
     """Controller to make the AUV interactive"""
