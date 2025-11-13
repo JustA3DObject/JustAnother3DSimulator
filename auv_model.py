@@ -161,6 +161,34 @@ class AUVPhysicsModel:
             self.params['M_q|q'],
             self.params['N_r|r']
         ])
+    
+
+    def reset(self):
+        """ Resets the AUV state"""
+        self.eta = np.zeros((6, 1))
+        self.eta[2] = -5.0 # Reset to 5 meter depth
+        self.nu = np.zeros((6, 1))
+
+    def calculate_hydostatics(self, eta):
+        """ Calculates g(eta) - restorig forces (gravity, bouyancy)"""
+        phi, theta, psi = eta[3:6].flatten()
+
+        # Rotation matrix from body to world
+        R_b_w =  jacobian(eta)[0:3, 0:3]
+
+        # Gravity force (Weight) (Acts at CG (r_g))
+        f_g_world = np.array([[0], [0], [self.W]])
+        f_g_body = R_b_w.T @ f_g_world
+        tau_g_body = skew(self.r_g.flatten()) @ f_g_body
+
+        # Bouyancy force (Acts at CB (origin, r_b))
+        f_b_world = np.array([[0], [0], [-self.B]])
+        f_b_body = R_b_w.T @ f_b_world
+        tau_b_body = np.zeros((3, 1)) # Moment is 0 because r_b = [0, 0, 0]
+
+        # Total restoring force (moment vector)
+        g_eta = np.vstack((f_g_body + f_b_body, tau_g_body + tau_b_body))
+        return g_eta
 
 class AUVController: 
     """Controller to make the AUV interactive"""
