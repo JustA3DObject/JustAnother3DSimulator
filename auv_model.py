@@ -189,6 +189,62 @@ class AUVPhysicsModel:
         # Total restoring force (moment vector)
         g_eta = np.vstack((f_g_body + f_b_body, tau_g_body + tau_b_body))
         return g_eta
+    
+    def calculate_damping(self, nu):
+        """ Calculates D(nu)*nu (linear and quadratic damping)"""
+        D_nu = self.D_lin @ nu
+
+        # Add quadratic damping 
+        D_nu_quad = self.D_quad_coeffs @ (np.abs(nu) * nu)
+
+        return D_nu_quad + D_nu
+    
+    def calculate_coriolis(self, nu):
+        """ Calculates C(nu)*nu = C_RB(nu) + C_A(nu)*nu
+        C_RB is based on the Newton-Euler equations.
+        C_A is a simplified matrix for added mass.
+        """
+
+        # Rigid body coriolis C_RB(nu)*nu
+        u, v, w, p, q, r = nu.flatten()
+        m = self.m
+        xg, yg, zg = self.r_g.flatten()
+        Ixx, Iyy, Izz = self.params['Ixx'], self.params['Iyy'], self.params['Izz']
+
+        C_RB_nu = np.zeros((6, 1))
+
+        # SURGE
+        C_RB_nu[0] = m * (-v * r + w * q - xg * (q**2 + r**2) + yg * (p*q) + zg * (p * r))
+
+        # SWAY
+        C_RB_nu[1] = m * (-w * p + u * r - yg * (p**2 + r**2) + zg * (q * r) + xg * (p * q))
+
+        # HEAVE
+        C_RB_nu[2] = m * (-u * q + v * p - zg * (p**2 + q**2) + xg * (r*p) + yg * (r * q))
+
+        # ROLL
+        C_RB_nu[3] = (Izz - Iyy) * q * r + m * (yg * (-u * q + v * p) - zg * (-w * p + u * r))
+
+        # PITCH
+        C_RB_nu[4] = (Ixx - Izz)* p * r + m * (zg * (-v * r + w * q) - xg * (-u * q + v * p))
+
+        # YAW
+        C_RB_nu[5] = (Iyy - Ixx) * p * q + m*(xg * (-w * p + u * r) - yg * (-v * r + w * q))
+
+        # Added mass coriolis C_A(nu)*nu
+        # (Simplified, assuming diagonal M_A for C_A calculation)
+        A11, A22, A33 = self.M_A[0,0], self.M_A[1,1], self.M_A[2,2]
+        A44, A55, A66 = self.M_A[3,3], self.M_A[4,4], self.M_A[5,5]
+
+        C_A_nu = np.zeros((6, 1))
+        C_A_nu[0] = (A33*w*q - A22*v*r)
+        C_A_nu[1] = (A11*u*r - A33*w*p)
+        C_A_nu[2] = (A22*v*p - A11*u*q)
+        C_A_nu[3] = (A66*r*q - A55*q*r)
+        C_A_nu[4] = (A44*p*r - A66*r*p)
+        C_A_nu[5] = (A55*q*p - A44*p*q)
+        
+        return C_RB_nu + C_A_nu
 
 class AUVController: 
     """Controller to make the AUV interactive"""
