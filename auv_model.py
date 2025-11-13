@@ -669,3 +669,211 @@ class AUVController:
         self.orientation[0] = np.arctan2(np.sin(self.orientation[0]), np.cos(self.orientation[0]))
         self.orientation[1] = np.arctan2(np.sin(self.orientation[1]), np.cos(self.orientation[1]))
         self.orientation[2] = np.arctan2(np.sin(self.orientation[2]), np.cos(self.orientation[2]))
+
+# Visualization 
+
+def create_interactive_auv():
+    """Create interactive AUV with keyboard controls"""
+    
+    # Setup geometry
+    old_L = 1.33
+    old_a = 0.191
+    old_a_offset = 0.0165
+    old_c_offset = 0.0368
+    old_lf = 0.828
+    
+    new_L = REMUS_PARAMS["L"]
+    new_D = REMUS_PARAMS["D"]
+    
+    scale_ratio = new_L / old_L
+    
+    auv_geo = {
+        'a': old_a * scale_ratio,
+        'a_offset': old_a_offset * scale_ratio,
+        'c_offset': old_c_offset * scale_ratio,
+        'n': 2,
+        'd': new_D,
+        'lf': old_lf * scale_ratio,
+        'l': new_L,
+    }
+    
+    # Create controller (which now creates the physics model)
+    controller = AUVController(auv_geo)
+    
+    # Setup figure
+    fig = plt.figure(figsize=(14, 10))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # Store surface objects
+    surf_nose = None
+    surf_mid = None
+    surf_tail = None
+    surf_sss1 = None
+    surf_sss2 = None
+    surf_mast = None
+    surf_cage = None
+    dvl_collection = None
+    fin_collections = []
+    prop_surfaces = []
+    
+    # Control instructions
+    instructions = (
+        "6-DOF DYNAMIC SIMULATOR\n"
+        "W - Throttle Forward\n"
+        "X - Throttle Backward\n"
+        "A - Yaw Left | D - Yaw Right\n"
+        "Z - Pitch Up | C - Pitch Down\n"
+        "B - Brake\n"
+        "R - Reset\n"
+        "AUV is positively buoyant and hydrostatically stable."
+    )
+    
+    # Add text for instructions
+    fig.text(0.02, 0.98, instructions, transform=fig.transFigure,
+             fontsize=10, verticalalignment='top', family='monospace',
+             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    
+    # State display
+    state_text = ax.text2D(0.02, 0.02, '', transform=ax.transAxes,
+                           fontsize=9, family='monospace',
+                           bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
+    
+    def on_key_press(event):
+        """Handle key press events"""
+        if event.key in ['w', 'x', 'a', 'd', 'z', 'c', 'b', 'r']:
+            controller.keys_pressed.add(event.key)
+    
+    def on_key_release(event):
+        """Handle key release events"""
+        if event.key in controller.keys_pressed:
+            controller.keys_pressed.discard(event.key)
+    
+    def init():
+        """Initialize animation"""
+        ax.set_xlabel('X (m)', fontsize=10)
+        ax.set_ylabel('Y (m)', fontsize=10)
+        ax.set_zlabel('Z (m)', fontsize=10)
+        ax.set_title('AUV 6-DOF Dynamic Simulator (CB-Centered)', fontsize=12)
+        
+        limit = 3
+        pos = controller.position
+        ax.set_xlim(pos[0] - limit, pos[0] + limit)
+        ax.set_ylim(pos[1] - limit, pos[1] + limit)
+        ax.set_zlim(pos[2] - limit, pos[2] + limit)
+        
+        return []
+    
+    def update(frame):
+        """Animation update function"""
+        nonlocal surf_nose, surf_mid, surf_tail, fin_collections
+        nonlocal surf_sss1, surf_sss2, surf_mast, surf_cage, dvl_collection, prop_surfaces
+        
+        # Update state based on keyboard
+        controller.update_state()
+        
+        # Clear previous artists
+        if surf_nose: surf_nose.remove()
+        if surf_mid: surf_mid.remove()
+        if surf_tail: surf_tail.remove()
+        if surf_sss1: surf_sss1.remove()
+        if surf_sss2: surf_sss2.remove()
+        if surf_mast: surf_mast.remove()
+        if surf_cage: surf_cage.remove()
+        if dvl_collection: dvl_collection.remove()
+        for fc in fin_collections: fc.remove()
+        fin_collections.clear()
+        for ps in prop_surfaces: ps.remove()
+        prop_surfaces.clear()
+        
+        # Transform and plot main hull geometry
+        X_nose, Y_nose, Z_nose = controller.transform_geometry(
+            *controller.base_geometry['nose'])
+        X_mid, Y_mid, Z_mid = controller.transform_geometry(
+            *controller.base_geometry['mid'])
+        X_tail, Y_tail, Z_tail = controller.transform_geometry(
+            *controller.base_geometry['tail'])
+        
+        surf_nose = ax.plot_surface(X_nose, Y_nose, Z_nose, 
+                                    color='blue', alpha=0.7, rstride=5, cstride=5)
+        surf_mid = ax.plot_surface(X_mid, Y_mid, Z_mid, 
+                                   color='green', alpha=0.7, rstride=5, cstride=5)
+        surf_tail = ax.plot_surface(X_tail, Y_tail, Z_tail, 
+                                    color='red', alpha=0.7, rstride=5, cstride=5)
+        
+        # Plot other parts
+        X_sss1, Y_sss1, Z_sss1 = controller.transform_geometry(*controller.base_geometry['sss1'])
+        X_sss2, Y_sss2, Z_sss2 = controller.transform_geometry(*controller.base_geometry['sss2'])
+        surf_sss1 = ax.plot_surface(X_sss1, Y_sss1, Z_sss1, color='grey', alpha=0.8)
+        surf_sss2 = ax.plot_surface(X_sss2, Y_sss2, Z_sss2, color='grey', alpha=0.8)
+        
+        dvl_faces_transformed = controller.transform_dvl()
+        dvl_collection = Poly3DCollection(dvl_faces_transformed, facecolors='orange', alpha=0.8)
+        ax.add_collection3d(dvl_collection)
+        
+        X_mast, Y_mast, Z_mast = controller.transform_geometry(*controller.base_geometry['mast'])
+        surf_mast = ax.plot_surface(X_mast, Y_mast, Z_mast, color='silver', alpha=0.9)
+        
+        X_cage, Y_cage, Z_cage = controller.transform_geometry(*controller.base_geometry['cage'])
+        surf_cage = ax.plot_surface(X_cage, Y_cage, Z_cage, color='grey', alpha=0.4)
+        
+        transformed_fins = controller.transform_fins()
+        for fin_verts in transformed_fins:
+            fin_col = Poly3DCollection([fin_verts], facecolors='darkslategrey', edgecolors='black', alpha=0.9)
+            ax.add_collection3d(fin_col)
+            fin_collections.append(fin_col)
+        
+        for X_b, Y_b, Z_b in controller.base_geometry['prop_blades']:
+            X_prop, Y_prop, Z_prop = controller.transform_geometry(X_b, Y_b, Z_b)
+            prop_surf = ax.plot_surface(X_prop, Y_prop, Z_prop, color='black', alpha=0.9)
+            prop_surfaces.append(prop_surf)
+        
+        # Update camera to follow AUV's CB
+        pos = controller.position
+        offset = 4
+        ax.set_xlim(pos[0] - offset, pos[0] + offset)
+        ax.set_ylim(pos[1] - offset, pos[1] + offset)
+        ax.set_zlim(pos[2] - offset, pos[2] + offset)
+        
+        # Update state text
+        pos = controller.physics.eta[0:3].flatten()
+        vel = controller.physics.nu.flatten()
+        ori = controller.physics.eta[3:6].flatten()
+        
+        # Display surge velocity (u) as "Speed"
+        # Since u is negative for forward, we take abs(vel[0])
+        speed = abs(vel[0]) 
+        
+        state_text.set_text(
+            f"Pos (x,y,z): {pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f}\n"
+            f"Vel (u,v,w): {vel[0]:.2f}, {vel[1]:.2f}, {vel[2]:.2f} m/s\n"
+            f"Ori (r,p,y): {np.degrees(ori[0]):.1f}, {np.degrees(ori[1]):.1f}, {np.degrees(ori[2]):.1f}°\n"
+            f"AngVel (p,q,r): {np.degrees(vel[3]):.1f}, {np.degrees(vel[4]):.1f}, {np.degrees(vel[5]):.1f}°/s"
+        )
+        
+        return ([surf_nose, surf_mid, surf_tail, surf_sss1, surf_sss2, 
+                surf_mast, surf_cage, dvl_collection] + 
+                fin_collections + prop_surfaces)
+    
+    # Connect keyboard events
+    fig.canvas.mpl_connect('key_press_event', on_key_press)
+    fig.canvas.mpl_connect('key_release_event', on_key_release)
+    
+    # Create animation
+    anim = FuncAnimation(fig, update, init_func=init,
+                        frames=None, interval=controller.dt * 1000, blit=False)
+    
+    plt.show()
+    
+
+if __name__ == '__main__':
+    print("AUV 6-DOF Dynamic Simulator")
+    print("\nControls:")
+    print("  W - Accelerate Forward")
+    print("  X - Accelerate Backward")
+    print("  A - Yaw Left (Turn Left)")
+    print("  D - Yaw Right (Turn Right)")
+    print("  Z - Pitch Up (Nose Up)")
+    print("  C - Pitch Down (Nose Down)")
+    print("  B - Brake")
+    print("  R - Reset")
+    create_interactive_auv()
