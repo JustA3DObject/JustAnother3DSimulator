@@ -336,38 +336,31 @@ class AUVPhysicsModel:
 
 class AUVController: 
     """Controller to make the AUV interactive"""
+
     def __init__(self, geometry):
         # Store geometry parameters
         self.geometry = geometry
 
-        # Get the Center of Mass (COM) position relative to the nose (from auv_parameters.py)
-        # This is the vector we need to subtract from all geometry
-        # to re-center the model around the COM.
-        self.com_vec_from_nose = np.array(PARAMS_DERIVED["cg_pos"])
+        # Create the physics model
+        self.physics = AUVPhysicsModel()
 
-        # Initialize state vars
-        # self.position now represents the world coordinates of the COM
-        self.position = np.array([0.0, 0.0, -5.0]) # [x, y ,z] - Start 5m deep
-        # self.orientation is the rotation around the COM
-        self.orientation = np.array([0.0, 0.0, 0.0]) # [roll, pitch, yaw]
-        # Roll control will not be added because AUVs don't have one.
+        # Get the new origin (CB) position relative to the nose
+        # This is used ONLY for plotting the geometry, not for physics
+        self.origin_vec_from_nose = np.array(PARAMS_DERIVED["cb_pos"])
+
+        # Read state from physics model
+        self.position = self.physics.eta[0:3].flatten()
+        self.orientation = self.physics.eta[3:6].flatten()
+        self.velocity = self.physics.nu[0, 0]
 
         # Movement parameters
-        self.velocity = 0.0 # m/s (Surge velocity)
-        self.max_velocity = 2.0 # m/s
-        self.acceleration = 0.5 # m/s^2
-        self.deceleration = 0.8 # m/s^2
-        self.friction = 0.2 # m/s^2 (Decelerates the AUV and brings it to rest if it has a velocity but no input command)
-        
-        self.max_angular_speed = 0.05 # rad/s (Max turn rate at full speed)
-        self.buoyancy_rate = 0.1 # m/s (Constant upward floating speed)
-        
+        self.max_velocity = 2.0 # For display only
         self.dt = 0.05 # s
 
         # Key tracking
         self.keys_pressed = set()
 
-        # Generating geometry (this will now use self.com_vec_from_nose)
+        # Generating geometry
         self.generate_base_geometry()
 
 
