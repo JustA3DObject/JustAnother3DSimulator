@@ -368,7 +368,7 @@ class AUVController:
         """
         Generate the AUV geometry.
         All geometry is first created relative to the nose (x=0),
-        then shifted so the origin (0,0,0) is at the Center of Mass.
+        then shifted so the origin (0,0,0) is at the Center of Buoyancy.
         """
         geo = self.geometry
         
@@ -520,20 +520,21 @@ class AUVController:
         Y_cage = cage_radius * np.cos(TH_cage)
         Z_cage = cage_radius * np.sin(TH_cage)
         
-                # self.com_vec_from_nose contains (x_cg, y_cg, z_cg) relative to nose
-        com_x, com_y, com_z = self.com_vec_from_nose
+        
+        # Re-center All Geometry around CB
+        origin_x, origin_y, origin_z = self.origin_vec_from_nose
 
         # Re-center hull sections
-        X_nose -= com_x; Y_nose -= com_y; Z_nose -= com_z
-        X_mid  -= com_x; Y_mid  -= com_y; Z_mid  -= com_z
-        X_tail -= com_x; Y_tail -= com_y; Z_tail -= com_z
+        X_nose -= origin_x; Y_nose -= origin_y; Z_nose -= origin_z
+        X_mid  -= origin_x; Y_mid  -= origin_y; Z_mid  -= origin_z
+        X_tail -= origin_x; Y_tail -= origin_y; Z_tail -= origin_z
         
         # Re-center SSS patches
-        X_sss1 -= com_x; Y_sss1 -= com_y; Z_sss1 -= com_z
-        X_sss2 -= com_x; Y_sss2 -= com_y; Z_sss2 -= com_z
+        X_sss1 -= origin_x; Y_sss1 -= origin_y; Z_sss1 -= origin_z
+        X_sss2 -= origin_x; Y_sss2 -= origin_y; Z_sss2 -= origin_z
         
-        # Re-center DVL faces (by re-centering the 'v' vertices)
-        v_recentered = v - self.com_vec_from_nose
+        # Re-center DVL faces
+        v_recentered = v - self.origin_vec_from_nose
         dvl_faces_recentered = [
             [v_recentered[0], v_recentered[1], v_recentered[2], v_recentered[3]], 
             [v_recentered[4], v_recentered[5], v_recentered[6], v_recentered[7]], 
@@ -544,22 +545,22 @@ class AUVController:
         ]
 
         # Re-center Mast
-        X_mast -= com_x; Y_mast -= com_y; Z_mast -= com_z
+        X_mast -= origin_x; Y_mast -= origin_y; Z_mast -= origin_z
 
         # Re-center Propeller Blades
         prop_blades_recentered = []
         for (X_b, Y_b, Z_b) in prop_blades:
             prop_blades_recentered.append((
-                X_b - com_x, Y_b - com_y, Z_b - com_z
+                X_b - origin_x, Y_b - origin_y, Z_b - origin_z
             ))
 
         # Re-center Cage
-        X_cage -= com_x; Y_cage -= com_y; Z_cage -= com_z
+        X_cage -= origin_x; Y_cage -= origin_y; Z_cage -= origin_z
 
         # Re-center Fins
         fin_verts_recentered = []
         for fin in fin_verts:
-            fin_array_recentered = np.array(fin) - self.com_vec_from_nose
+            fin_array_recentered = np.array(fin) - self.origin_vec_from_nose
             fin_verts_recentered.append(fin_array_recentered)
 
         # Store Geometry
@@ -570,12 +571,12 @@ class AUVController:
             'tail': (X_tail, Y_tail, Z_tail),
             'sss1': (X_sss1, Y_sss1, Z_sss1),
             'sss2': (X_sss2, Y_sss2, Z_sss2),
-            'dvl_faces': dvl_faces_recentered, # Use recentered version
+            'dvl_faces': dvl_faces_recentered,
             'mast': (X_mast, Y_mast, Z_mast),
             'cage': (X_cage, Y_cage, Z_cage),
-            'prop_blades': prop_blades_recentered, # Use recentered version
+            'prop_blades': prop_blades_recentered,
         }
-        self.fins = fin_verts_recentered # Use recentered version
+        self.fins = fin_verts_recentered
 
     def rotation_matrix(self, roll, pitch, yaw):
         """Create rotation matrix from Euler angles (ZYX convention)"""
