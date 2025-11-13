@@ -233,14 +233,13 @@ class AUVPhysicsModel:
 
 
     def calculate_control_forces(self, nu, control_cmds):
-        """ Calculates tau_control based on inputs"""
+        """Calculates tau_control based on inputs."""
         # Use u (surge vel) for control effectiveness
         # Use abs(u) to handle reverse
         u = nu[0, 0] 
-        u_eff = abs(u)
         
         # Get commands
-        throttle_cmd = control_cmds['throttle'] # 1.0 (fwd), -0.5 (rev)
+        throttle_cmd = control_cmds['throttle'] # -1.0 (fwd), 0.5 (rev)
         yaw_cmd = control_cmds['yaw'] # 1.0 (left), -1.0 (right)
         pitch_cmd = control_cmds['pitch'] # 1.0 (down), -1.0 (up)
 
@@ -249,17 +248,17 @@ class AUVPhysicsModel:
         
         # Rudder (Yaw)
         delta_r = yaw_cmd * self.MAX_RUDDER_ANGLE
-        # Y = Yuu_dr * |u|*u * dr  (Using |u|*u for stability)
-        Y_rudder = self.params['Yuu_delta_r'] * (u_eff * u) * delta_r
-        # N = Nuu_dr * |u|*u * dr
-        N_rudder = self.params['Nuu_delta_r'] * (u_eff * u) * delta_r
+        # Y = Yuu_dr * u^2 * dr
+        Y_rudder = self.params['Yuu_delta_r'] * (abs(u) * u) * delta_r
+        # N = Nuu_dr * u^2 * dr
+        N_rudder = self.params['Nuu_delta_r'] * (abs(u) * u) * delta_r
         
         # Stern Plane (Pitch)
         delta_s = pitch_cmd * self.MAX_STERN_ANGLE
-        # Z = Zuu_ds * |u|*u * ds
-        Z_stern = self.params['Zuu_delta_s'] * (u_eff * u) * delta_s
-        # M = Muu_ds * |u|*u * ds
-        M_stern = self.params['Muu_delta_s'] * (u_eff * u) * delta_s
+        # Z = Zuu_ds * u^2 * ds
+        Z_stern = self.params['Zuu_delta_s'] * (abs(u) * u) * delta_s
+        # M = Muu_ds * u^2 * ds
+        M_stern = self.params['Muu_delta_s'] * (abs(u) * u) * delta_s
         
         # Roll (K) - not controlled
         K_control = 0.0
@@ -604,7 +603,7 @@ class AUVController:
     def update_state(self):
         """
         Update the state by sending commands to the physics model
-        and then reading its new state.
+        and then reading its new state
         """
         
         # Parse keyboard inputs into control commands
@@ -617,19 +616,19 @@ class AUVController:
         if 'r' in self.keys_pressed:
             self.physics.reset()
 
-        # 'W' = Forward = Positive X-direction = Positive Thrust
+        # 'W' = Forward = Negative X-direction = Negative Thrust
         if 'w' in self.keys_pressed:
-            control_cmds['throttle'] = 1.0  # Full forward thrust
-        # 'X' = Backward = Negative X-direction = Negative Thrust
+            control_cmds['throttle'] = -1.0  # Full forward thrust
+        # 'X' = Backward = Positive X-direction = Positive Thrust
         elif 'x' in self.keys_pressed:
-            control_cmds['throttle'] = -0.5 # Half reverse thrust
+            control_cmds['throttle'] = 0.5 # Half reverse thrust
             
         # Brake (applies counter-thrust)
         if 'b' in self.keys_pressed:
-            if self.physics.nu[0,0] > 0.1: # If moving forward (u > 0)
-                control_cmds['throttle'] = -1.0 # Apply reverse (negative)
-            elif self.physics.nu[0,0] < -0.1: # If moving backward (u < 0)
-                control_cmds['throttle'] = 1.0 # Apply forward (positive)
+            if self.physics.nu[0,0] < -0.1: # If moving forward (u < 0)
+                control_cmds['throttle'] = 1.0 # Apply reverse (positive)
+            elif self.physics.nu[0,0] > 0.1: # If moving backward (u > 0)
+                control_cmds['throttle'] = -1.0 # Apply forward (negative)
 
         # Yaw (Rudder)
         if 'a' in self.keys_pressed:
