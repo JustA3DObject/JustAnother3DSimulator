@@ -1,26 +1,17 @@
 import numpy as np
+from numpy.linalg import inv
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from auv_parameters import REMUS_PARAMS, PARAMS_DERIVED
-from matplotlib.animation import FuncAnimation
 from auv_hydrodynamic_parameters import HYDRO_PARAMS
-from numpy.linalg import inv
+from matplotlib.animation import FuncAnimation
 
-# Helper Functions
+# Helper Functions 
 
-def create_sphere_marker(center, radius, resolution=10):
-    """Helper function to create (X, Y, Z) for a sphere surface."""
-    u = np.linspace(0, 2 * np.pi, resolution)
-    v = np.linspace(0, np.pi, resolution)
-    
-    X = center[0] + radius * np.outer(np.cos(u), np.sin(v))
-    Y = center[1] + radius * np.outer(np.sin(u), np.sin(v))
-    Z = center[2] + radius * np.outer(np.ones(np.size(u)), np.cos(v))
-    return X, Y, Z
 
 def skew(v):
-    """Converts a 3-element vector to a 3x3 skew-symmetric matrix."""
+    """ Converts a 3-element vector to a 3x3 skew-symmetric matrix"""
     return np.array([
         [0, -v[2], v[1]],
         [v[2], 0, -v[0]],
@@ -28,15 +19,14 @@ def skew(v):
     ])
 
 def jacobian(eta):
-    """Computes the 6-DOF Jacobian matrix J(eta)."""
+    """ Computes the 6-DOF Jacobian matrix J(eta)"""
     phi, theta, psi = eta[3:6].flatten()
     
     cphi, sphi = np.cos(phi), np.sin(phi)
     cth, sth = np.cos(theta), np.sin(theta)
     cpsi, spsi = np.cos(psi), np.sin(psi)
     
-    # J1 (Linear)
-    
+    # J1 (Linear) - Fossen/SNAME convention
     J1 = np.array([
         [cpsi*cth, -spsi*cphi + cpsi*sth*sphi, spsi*sphi + cpsi*sth*cphi],
         [spsi*cth, cpsi*cphi + spsi*sth*sphi, -cpsi*sphi + spsi*sth*cphi],
@@ -55,71 +45,69 @@ def jacobian(eta):
     return J
 
 class AUVPhysicsModel:
-    """Implements the 6-DOF dyamic model for the AUV"""
-
+    """ Implements the 6-DOF dynamic model for the AUV"""
     def __init__(self):
         # Load physical and hydrodynamic parameters
         self.params = {**REMUS_PARAMS, **HYDRO_PARAMS}
-
-        # State vectors
-        # eta: [x, y, z, phi, theta, psi] (World frame position and orientation)
+        
+        # State Vectors
+        # eta: [x, y, z, phi, theta, psi] (World-frame position and orientation)
         self.eta = np.zeros((6, 1))
-        self.eta[2] = -5.0 # Start at 5 meter under water
-        # nu: [u, v, w, p, q, r] (Body frame linear and angular velocities)
+        self.eta[2] = -5.0 # Start 5m deep
+        # nu: [u, v, w, p, q, r] (Body-frame linear and angular velocities)
         self.nu = np.zeros((6, 1))
-
-        # Physical constants 
+        
+        # Physical Constants
         self.m = self.params['m']
         self.L = self.params['L']
         self.W = self.params['W']
         self.B = self.params['B']
-        self.g = 9.81 # m/s^2
+        self.g = 9.81
 
-        # Body frame vectors 
-        # Vector from origin to CB
+        # Define body-frame vectors
+        # Vector from CB (origin) to CB
         self.r_b = np.array([0., 0., 0.])
-
-        # CB position relative to nose
+        
+        # Calculate CB position relative to the nose
         r_b_vec_nose = np.array(PARAMS_DERIVED["cb_pos"])
-
-        # CG position relative to nose
+        # Calculate CG position relative to the nose
         r_g_vec_nose = np.array(PARAMS_DERIVED["cg_pos"])
-
-        # Vector from origin to CG
+        
+        # Vector from CB (origin) to CG
         self.r_g = (r_g_vec_nose - r_b_vec_nose).reshape(3, 1)
-
-        # Inertia tensor (assumed to be about CB)
+        
+        # Inertia tensor
         self.I_o = np.diag([
             self.params['Ixx'],
             self.params['Iyy'],
             self.params['Izz']
         ])
-
-        # System matrices 
+        
+        # System Matrices
         self.build_mass_matrices()
         self.build_damping_matrices()
-
-        # Control limits 
-        self.MAX_THRUST = 40.0 # Newtons (approx 4 kg force)
+        
+        # Control Limits
+        self.MAX_THRUST = 40.0 # Newtons (approx. 4kg-force)
         self.MAX_RUDDER_ANGLE = np.radians(20) # rad
         self.MAX_STERN_ANGLE = np.radians(20) # rad
 
     def build_mass_matrices(self):
-        """ Builds the M_RB and R_A matrices based on CB origin"""
+        """ Builds the M_RB and M_A matrices based on CB origin"""
         m = self.m
-
-        # Rigid body mass matrix (M_RB)
-        # M_RB = [m*I, -m*S(r_g)]
-        #        [m*S(r_g), I_o]
+        
+        # Rigid-Body Mass Matrix (M_RB)
+        # M_RB = [ m*I, -m*S(r_g)]
+        #        [ m*S(r_g), I_o]
         S_rg = skew(self.r_g.flatten())
-
+        
         self.M_RB = np.zeros((6, 6))
         self.M_RB[0:3, 0:3] = np.diag([m, m, m])
         self.M_RB[0:3, 3:6] = -m * S_rg
         self.M_RB[3:6, 0:3] = m * S_rg
         self.M_RB[3:6, 3:6] = self.I_o
-
-        # Added mass matrix (M_A)
+        
+        # Added Mass Matrix (M_A)
         self.M_A = np.diag([
             -self.params['Xu_dot'],
             -self.params['Yv_dot'],
@@ -128,7 +116,6 @@ class AUVPhysicsModel:
             -self.params['Mq_dot'],
             -self.params['Nr_dot']
         ])
-
         # Off-diagonal added mass terms
         self.M_A[1, 5] = self.M_A[5, 1] = -self.params.get('Y_r_dot', 0)
         self.M_A[2, 4] = self.M_A[4, 2] = -self.params.get('Z_q_dot', 0)
@@ -138,11 +125,10 @@ class AUVPhysicsModel:
         # Total Mass Matrix
         self.M = self.M_RB + self.M_A
         self.M_inv = inv(self.M)
-    
+
     def build_damping_matrices(self):
         """ Builds the linear and quadratic damping matrices"""
-
-        # Linear damping (D_lin)
+        # Linear Damping (D_lin)
         self.D_lin = -np.diag([
             self.params['Xu'],
             self.params['Yv'],
@@ -150,88 +136,87 @@ class AUVPhysicsModel:
             self.params['Kp'],
             self.params['Mq'],
             self.params['Nr']
-        ])        
-
-        # Quadratic damping (Dn) - Store coefficients
-        self.D_quad_coeffs = -np.diag([
-            self.params['X_u|u'],
-            self.params['Y_v|v'],
-            self.params['Z_w|w'],
-            self.params['K_p|p'],
-            self.params['M_q|q'],
-            self.params['N_r|r']
         ])
-    
+        
+        # Quadratic Damping (Dn) - Store coefficients
+        self.D_quad_coeffs = -np.diag([
+            self.params['X_u|u|'],
+            self.params['Y_v|v|'],
+            self.params['Z_w|w|'],
+            self.params['K_p|p|'],
+            self.params['M_q|q|'],
+            self.params['N_r|r|']
+        ])
 
     def reset(self):
-        """ Resets the AUV state"""
+        """ Resets the AUV state."""
         self.eta = np.zeros((6, 1))
-        self.eta[2] = -5.0 # Reset to 5 meter depth
+        self.eta[2] = -5.0 # Reset to 5m deep
         self.nu = np.zeros((6, 1))
 
     def calculate_hydrostatics(self, eta):
-        """ Calculates g(eta) - restorig forces (gravity, bouyancy)"""
+        """ Calculates g(eta) (restoring forces (gravity, buoyancy))"""
         phi, theta, psi = eta[3:6].flatten()
-
+        
         # Rotation matrix from body to world
-        R_b_w =  jacobian(eta)[0:3, 0:3]
-
-        # Gravity force (Weight) (Acts at CG (r_g))
+        R_b_w = jacobian(eta)[0:3, 0:3]
+        
+        # Gravity force (acts at CG (r_g))
         f_g_world = np.array([[0], [0], [self.W]])
         f_g_body = R_b_w.T @ f_g_world
         tau_g_body = skew(self.r_g.flatten()) @ f_g_body
-
-        # Bouyancy force (Acts at CB (origin, r_b))
+        
+        # Buoyancy force (acts at CB (origin, r_b))
         f_b_world = np.array([[0], [0], [-self.B]])
         f_b_body = R_b_w.T @ f_b_world
-        tau_b_body = np.zeros((3, 1)) # Moment is 0 because r_b = [0, 0, 0]
-
+        tau_b_body = np.zeros((3, 1)) # Moment is 0 since r_b = [0,0,0]
+        
         # Total restoring force (moment vector)
         g_eta = np.vstack((f_g_body + f_b_body, tau_g_body + tau_b_body))
         return g_eta
-    
+
     def calculate_damping(self, nu):
         """ Calculates D(nu)*nu (linear and quadratic damping)"""
         D_nu = self.D_lin @ nu
-
-        # Add quadratic damping 
+        
+        # Add quadratic damping
         D_nu_quad = self.D_quad_coeffs @ (np.abs(nu) * nu)
+        
+        return D_nu + D_nu_quad
 
-        return D_nu_quad + D_nu
-    
     def calculate_coriolis(self, nu):
-        """ Calculates C(nu)*nu = C_RB(nu) + C_A(nu)*nu
+        """
+        Calculates C(nu)*nu = C_RB(nu)*nu + C_A(nu)*nu
         C_RB is based on the Newton-Euler equations.
         C_A is a simplified matrix for added mass.
         """
-
-        # Rigid body coriolis C_RB(nu)*nu
+        # Rigid-Body Coriolis C_RB(nu)*nu        
         u, v, w, p, q, r = nu.flatten()
         m = self.m
         xg, yg, zg = self.r_g.flatten()
         Ixx, Iyy, Izz = self.params['Ixx'], self.params['Iyy'], self.params['Izz']
-
+        
         C_RB_nu = np.zeros((6, 1))
-
+        
         # SURGE
-        C_RB_nu[0] = m * (-v * r + w * q - xg * (q**2 + r**2) + yg * (p*q) + zg * (p * r))
+        C_RB_nu[0] = m * (-v * r + w * q - xg * (q**2 + r**2) + yg * (p * q) + zg * (p * r))
 
         # SWAY
         C_RB_nu[1] = m * (-w * p + u * r - yg * (p**2 + r**2) + zg * (q * r) + xg * (p * q))
 
         # HEAVE
-        C_RB_nu[2] = m * (-u * q + v * p - zg * (p**2 + q**2) + xg * (r*p) + yg * (r * q))
+        C_RB_nu[2] = m * (-u * q + v * p - zg * (p**2 + q**2) + xg * (r * p) + yg * (r * q))
 
         # ROLL
         C_RB_nu[3] = (Izz - Iyy) * q * r + m * (yg * (-u * q + v * p) - zg * (-w * p + u * r))
 
         # PITCH
-        C_RB_nu[4] = (Ixx - Izz)* p * r + m * (zg * (-v * r + w * q) - xg * (-u * q + v * p))
+        C_RB_nu[4] = (Ixx - Izz) * p * r + m * (zg * (-v * r + w * q) - xg * (-u * q + v * p))
 
         # YAW
-        C_RB_nu[5] = (Iyy - Ixx) * p * q + m*(xg * (-w * p + u * r) - yg * (-v * r + w * q))
-
-        # Added mass coriolis C_A(nu)*nu
+        C_RB_nu[5] = (Iyy - Ixx) * p * q + m * (xg * (-w * p + u * r) - yg * (-v * r + w * q))
+        
+        # Added Mass Coriolis C_A(nu)*nu
         # (Simplified, assuming diagonal M_A for C_A calculation)
         A11, A22, A33 = self.M_A[0,0], self.M_A[1,1], self.M_A[2,2]
         A44, A55, A66 = self.M_A[3,3], self.M_A[4,4], self.M_A[5,5]
@@ -245,39 +230,40 @@ class AUVPhysicsModel:
         C_A_nu[5] = (A55*q*p - A44*p*q)
         
         return C_RB_nu + C_A_nu
-    
-    def calculate_control_forces(self, nu, control_cmds):
-        """ Calculates tau control based on inputs"""
-        # Use surge velocity (u) for control effectiveness
-        # Use abs(u) to handle reverse
-        u = nu[0, 0]
-        u_eff = abs(u)
 
-        # Get commands 
-        throttle_cmd = control_cmds['throttle'] # 1.0 forward and -0.5 reverse
-        yaw_cmd = control_cmds['yaw'] # 1.0 left and -1.0 right
-        pitch_cmd = control_cmds['pitch'] # 1.0 down and -1.0 up
+
+    def calculate_control_forces(self, nu, control_cmds):
+        """ Calculates tau_control based on inputs"""
+        # Use u (surge vel) for control effectiveness
+        # Use abs(u) to handle reverse
+        u = nu[0, 0] 
+        u_eff = abs(u)
+        
+        # Get commands
+        throttle_cmd = control_cmds['throttle'] # 1.0 (fwd), -0.5 (rev)
+        yaw_cmd = control_cmds['yaw'] # 1.0 (left), -1.0 (right)
+        pitch_cmd = control_cmds['pitch'] # 1.0 (down), -1.0 (up)
 
         # Thrust
         X_thrust = throttle_cmd * self.MAX_THRUST
-
-        # Rudder (yaw)
+        
+        # Rudder (Yaw)
         delta_r = yaw_cmd * self.MAX_RUDDER_ANGLE
         # Y = Yuu_dr * |u|*u * dr  (Using |u|*u for stability)
         Y_rudder = self.params['Yuu_delta_r'] * (u_eff * u) * delta_r
         # N = Nuu_dr * |u|*u * dr
         N_rudder = self.params['Nuu_delta_r'] * (u_eff * u) * delta_r
-
-        # Stern plane (pitch)
+        
+        # Stern Plane (Pitch)
         delta_s = pitch_cmd * self.MAX_STERN_ANGLE
         # Z = Zuu_ds * |u|*u * ds
         Z_stern = self.params['Zuu_delta_s'] * (u_eff * u) * delta_s
         # M = Muu_ds * |u|*u * ds
         M_stern = self.params['Muu_delta_s'] * (u_eff * u) * delta_s
         
-        # 4. Roll (K) - not controlled
+        # Roll (K) - not controlled
         K_control = 0.0
-
+        
         tau_control = np.array([
             [X_thrust],
             [Y_rudder],
@@ -287,56 +273,55 @@ class AUVPhysicsModel:
             [N_rudder]
         ])
         return tau_control
-    
+
     def step(self, dt, control_cmds):
-        """ Advances the simulation by one time step dt
+        """
+        Advances the simulation by one time step dt.
         M*nu_dot + C(nu)*nu + D(nu)*nu + g(eta) = tau
         """
-        #Calculate all forces and moments in the body frame 
+        # Calculate all forces and moments in the body frame
         tau_G = self.calculate_hydrostatics(self.eta)
         tau_D = self.calculate_damping(self.nu)
-        tau_C  = self.calculate_coriolis(self.nu)
+        tau_C = self.calculate_coriolis(self.nu)
         tau_ctrl = self.calculate_control_forces(self.nu, control_cmds)
         
         # Sum all forces
-        # Use -g, -D, -C because they are on LHS of the equation
-        tau_total =  tau_ctrl - tau_G - tau_D - tau_C
-
-        # Solve for acceleration (nu_dot = M_inv * tau_total)
-        nu_dot = self.M_inv @ tau_total
-
-        # Solve for acceleration (nu_dot = M_inv * tau_total)
+        # We use -g, -D, -C because they are on the LHS of the equation
+        tau_total = tau_ctrl - tau_G - tau_D - tau_C
+        
+        # Solve for acceleration: nu_dot = M_inv * tau_total
         nu_dot = self.M_inv @ tau_total
         
-        # Integrate for acceleration (Euler step)
+        # Integrate acceleration (Euler step)
         self.nu = self.nu + nu_dot * dt
-
-        # Transform body velocities to world frame velocities 
-        # Handle gimble lock at +/- 90 deg pitch
+        
+        # Transform body velocities to world-frame velocities
+        # Handle gimbal lock at +/- 90 deg pitch
         theta = self.eta[4, 0]
         if abs(np.cos(theta)) < 1e-6:
-            self.eta[4, 0] = np.sign(theta) * (np.pi/2 - 1e-3) # nudge
-
+             self.eta[4, 0] = np.sign(theta) * (np.pi/2 - 1e-3) # nudge
+        
         J = jacobian(self.eta)
         eta_dot = J @ self.nu
-
+        
         # Integrate position
         self.eta = self.eta + eta_dot * dt
-
-        # Surface interaction
-        # Prevent AUV from going above the water (Z=0)
+        
+        # Surface Interaction
+        # Don't let AUV go above the water (Z=0)
         if self.eta[2, 0] > 0:
             self.eta[2, 0] = 0
-            # Stop any upward body frame velocity
-            if self.nu[2, 0] < 0:
+            # Stop any upward body-frame velocity (w)
+            if self.nu[2, 0] < 0: # w is positive down, so check for negative w
                 self.nu[2, 0] = 0
-            # Stop any upward world frame velocity
+            # Also stop any upward world-frame velocity
             if eta_dot[2, 0] > 0:
                 self.nu = inv(J) @ np.array([eta_dot[0,0], eta_dot[1,0], 0, eta_dot[3,0], eta_dot[4,0], eta_dot[5,0]]).reshape(6,1)
 
-class AUVController: 
-    """Controller to make the AUV interactive"""
+# Controller 
 
+class AUVController: 
+    """ Controller/Visualizer to make the AUV interactive"""
     def __init__(self, geometry):
         # Store geometry parameters
         self.geometry = geometry
@@ -519,6 +504,7 @@ class AUVController:
         Y_cage = cage_radius * np.cos(TH_cage)
         Z_cage = cage_radius * np.sin(TH_cage)
         
+        
         # Re-center All Geometry around CB
         origin_x, origin_y, origin_z = self.origin_vec_from_nose
 
@@ -577,13 +563,13 @@ class AUVController:
         self.fins = fin_verts_recentered
 
     def rotation_matrix(self, roll, pitch, yaw):
-        """Create rotation matrix from Euler angles (ZYX convention)"""
+        """ Create rotation matrix from Euler angles (ZYX convention)"""
         temp_eta = np.array([[0],[0],[0],[roll],[pitch],[yaw]])
         R = jacobian(temp_eta)[0:3, 0:3]
         return R
     
     def transform_geometry(self, X, Y, Z):
-        """Apply current position and orientation to CB-centered geometry."""
+        """ Apply current position and orientation to geometry"""
         points = np.stack([X.flatten(), Y.flatten(), Z.flatten()])
         R = self.rotation_matrix(*self.orientation)
         rotated = R @ points
@@ -595,7 +581,7 @@ class AUVController:
         return X_new, Y_new, Z_new
     
     def transform_fins(self):
-        """Transform fin vertices (which are CB-centered)"""
+        """ Transform fin vertices"""
         transformed_fins = []
         R = self.rotation_matrix(*self.orientation)
         for fin_array in self.fins:
@@ -605,7 +591,7 @@ class AUVController:
         return transformed_fins
     
     def transform_dvl(self):
-        """Transform DVL box (which are CB-centered)"""
+        """ Transform DVL box"""
         R = self.rotation_matrix(*self.orientation)
         transformed_faces = []
         for face in self.base_geometry['dvl_faces']:
@@ -669,9 +655,9 @@ class AUVController:
         self.orientation[0] = np.arctan2(np.sin(self.orientation[0]), np.cos(self.orientation[0]))
         self.orientation[1] = np.arctan2(np.sin(self.orientation[1]), np.cos(self.orientation[1]))
         self.orientation[2] = np.arctan2(np.sin(self.orientation[2]), np.cos(self.orientation[2]))
-
-# Visualization 
-
+    
+# Main Visualization
+        
 def create_interactive_auv():
     """Create interactive AUV with keyboard controls"""
     
@@ -718,12 +704,12 @@ def create_interactive_auv():
     
     # Control instructions
     instructions = (
-        "6-DOF DYNAMIC SIMULATOR\n"
+        "--- 6-DOF DYNAMIC SIMULATOR\n"
         "W - Throttle Forward\n"
         "X - Throttle Backward\n"
         "A - Yaw Left | D - Yaw Right\n"
         "Z - Pitch Up | C - Pitch Down\n"
-        "B - Brake\n"
+        "B - Emergency Brake\n"
         "R - Reset\n"
         "AUV is positively buoyant and hydrostatically stable."
     )
