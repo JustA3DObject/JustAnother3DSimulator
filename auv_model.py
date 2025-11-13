@@ -245,6 +245,48 @@ class AUVPhysicsModel:
         C_A_nu[5] = (A55*q*p - A44*p*q)
         
         return C_RB_nu + C_A_nu
+    
+    def calculate_control_forces(self, nu, control_cmds):
+        """ Calculates tau control based on inputs"""
+        # Use surge velocity (u) for control effectiveness
+        # Use abs(u) to handle reverse
+        u = nu[0, 0]
+        u_eff = abs(u)
+
+        # Get commands 
+        throttle_cmd = control_cmds['throttle'] # 1.0 forward and -0.5 reverse
+        yaw_cmd = control_cmds['yaw'] # 1.0 left and -1.0 right
+        pitch_cmd = control_cmds['pitch'] # 1.0 down and -1.0 up
+
+        # Thrust
+        X_thrust = throttle_cmd * self.MAX_THRUST
+
+        # Rudder (yaw)
+        delta_r = yaw_cmd * self.MAX_RUDDER_ANGLE
+        # Y = Yuu_dr * |u|*u * dr  (Using |u|*u for stability)
+        Y_rudder = self.params['Yuu_delta_r'] * (u_eff * u) * delta_r
+        # N = Nuu_dr * |u|*u * dr
+        N_rudder = self.params['Nuu_delta_r'] * (u_eff * u) * delta_r
+
+        # Stern plane (pitch)
+        delta_s = pitch_cmd * self.MAX_STERN_ANGLE
+        # Z = Zuu_ds * |u|*u * ds
+        Z_stern = self.params['Zuu_delta_s'] * (u_eff * u) * delta_s
+        # M = Muu_ds * |u|*u * ds
+        M_stern = self.params['Muu_delta_s'] * (u_eff * u) * delta_s
+        
+        # 4. Roll (K) - not controlled
+        K_control = 0.0
+
+        tau_control = np.array([
+            [X_thrust],
+            [Y_rudder],
+            [Z_stern],
+            [K_control],
+            [M_stern],
+            [N_rudder]
+        ])
+        return tau_control
 
 class AUVController: 
     """Controller to make the AUV interactive"""
