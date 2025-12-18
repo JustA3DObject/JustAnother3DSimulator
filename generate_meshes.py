@@ -7,29 +7,59 @@ REMUS_PARAMS = {
     "D": 0.191,
 }
 
-def write_obj(filename, vertices, faces):
+# MATERIAL DEFINITIONS
+# Defines the colors: Name -> (R, G, B)
+MATERIALS = {
+    "Mat_Nose": (0.0, 0.0, 1.0),   # Blue
+    "Mat_Body": (0.0, 1.0, 0.0),   # Green
+    "Mat_Tail": (1.0, 0.0, 0.0),   # Red
+    "Mat_Fins": (1.0, 1.0, 0.0),   # Yellow
+    "Mat_Prop": (0.1, 0.1, 0.1),   # Black (Dark Grey for visibility)
+}
+
+def write_mtl(filename):
+    """Writes the material library file."""
+    with open(filename, 'w') as f:
+        f.write(f"# Generated Material Library\n")
+        for name, rgb in MATERIALS.items():
+            f.write(f"newmtl {name}\n")
+            f.write(f"Kd {rgb[0]} {rgb[1]} {rgb[2]}\n") # Diffuse color
+            f.write("Ka 0.1 0.1 0.1\n") # Ambient
+            f.write("Ks 0.5 0.5 0.5\n") # Specular
+            f.write("Ns 50.0\n")        # Shininess
+            f.write("d 1.0\n\n")        # Opacity
+
+def write_obj(filename, vertices, parts, mtl_filename="remus.mtl"):
+    """
+    Writes an OBJ file with material references.
+    'parts' is a dictionary: { "MaterialName": [list_of_faces], ... }
+    """
     with open(filename, 'w') as f:
         f.write(f"# Generated AUV Mesh: {filename}\n")
+        f.write(f"mtllib {mtl_filename}\n") # Reference the material file
         f.write(f"o {os.path.basename(filename).split('.')[0]}\n")
+        
+        # Write all vertices first
         for v in vertices:
             f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
-        for face in faces:
-            # OBJ indices are 1-based
-            f.write("f " + " ".join([str(idx) for idx in face]) + "\n")
+        
+        # Write faces grouped by material
+        for mat_name, faces in parts.items():
+            f.write(f"usemtl {mat_name}\n")
+            for face in faces:
+                f.write("f " + " ".join([str(idx) for idx in face]) + "\n")
+    
     print(f"Saved {filename}")
 
-class AUVGeometry:
+class AUVGeometryFinal:
     def __init__(self):
         self.geo = self._get_geometry_params()
-        # Center of Buoyancy offset (approx middle of vehicle)
-        self.origin_shift = np.array([0.61, 0.0, 0.0]) 
-        self.meshes = {}
+        self.origin = np.array([0.61, 0.0, 0.0]) 
+        self.meshes = {} # Format: 'filename': (vertices, {mat: faces, ...})
         self._generate()
 
     def _get_geometry_params(self):
-        old_L = 1.33
-        new_L = REMUS_PARAMS["L"]
-        scale = new_L / old_L
+        scale = REMUS_PARAMS["L"] / 1.33
         return {
             'a': 0.191 * scale,       
             'a_offset': 0.0165 * scale, 
@@ -37,7 +67,7 @@ class AUVGeometry:
             'n': 2,
             'd': REMUS_PARAMS["D"],
             'lf': 0.828 * scale,      
-            'l': new_L,               
+            'l': REMUS_PARAMS["L"],               
         }
 
     def _generate_revolution_surface(self, x_profile, r_profile, num_theta=40):
@@ -53,64 +83,48 @@ class AUVGeometry:
             for th in theta:
                 y = r * np.cos(th)
                 z = r * np.sin(th)
-                # Shift by origin here
-                vertices.append([x - self.origin_shift[0], y, z])
+                vertices.append([x - self.origin[0], y, z])
         
-        # Generate Faces with Standard CCW Winding (Fixes lighting)
+        # Generate Faces (Quads)
         for i in range(rows - 1):
             for j in range(cols - 1):
                 p1 = i * cols + j + 1
                 p2 = i * cols + (j + 1) + 1
                 p3 = (i + 1) * cols + (j + 1) + 1
                 p4 = (i + 1) * cols + j + 1
-                faces.append([p1, p2, p3, p4])
+                faces.append([p4, p3, p2, p1])
                 
-            # Close the loop
+            # Close the loop (seam)
             p1 = i * cols + cols
             p2 = i * cols + 1
             p3 = (i + 1) * cols + 1
             p4 = (i + 1) * cols + cols
-            faces.append([p1, p2, p3, p4])
+            faces.append([p4, p3, p2, p1])
             
         return vertices, faces
 
     def _generate_box_fin(self, root_x, root_z, tip_x, tip_z, thickness):
         t_half = thickness / 2
-        
-        # Vertices relative to local fin origin
-        # Note: We apply origin_shift later during rotation
+        v_root_le = [root_x[0], 0, root_z[0]]; v_root_te = [root_x[1], 0, root_z[1]]
+        v_tip_le = [tip_x[0], 0, tip_z[0]]; v_tip_te = [tip_x[1], 0, tip_z[1]]
         
         verts = [
-            # Left side (Y = +t_half)
-            [root_x[0], t_half, root_z[0]], # 0: Root LE
-            [root_x[1], t_half, root_z[1]], # 1: Root TE
-            [tip_x[1],  t_half, tip_z[1]],  # 2: Tip TE
-            [tip_x[0],  t_half, tip_z[0]],  # 3: Tip LE
-            
-            # Right side (Y = -t_half)
-            [root_x[0], -t_half, root_z[0]], # 4: Root LE
-            [root_x[1], -t_half, root_z[1]], # 5: Root TE
-            [tip_x[1],  -t_half, tip_z[1]],  # 6: Tip TE
-            [tip_x[0],  -t_half, tip_z[0]],  # 7: Tip LE
+            [v_root_le[0], t_half, v_root_le[2]], [v_root_te[0], t_half, v_root_te[2]],
+            [v_tip_te[0],  t_half, v_tip_te[2]],  [v_tip_le[0],  t_half, v_tip_te[2]],
+            [v_root_le[0], -t_half, v_root_le[2]], [v_root_te[0], -t_half, v_root_te[2]],
+            [v_tip_te[0],  -t_half, v_tip_te[2]],  [v_tip_le[0],  -t_half, v_tip_le[2]],
         ]
+        verts = np.array(verts); verts[:, 0] -= self.origin[0]
         
-        # Faces (CCW winding for outside normals)
-        faces = [
-            [1, 4, 3, 2], # Left Side (Top if flat)
-            [5, 6, 7, 8], # Right Side
-            [1, 2, 6, 5], # Root Face
-            [3, 4, 8, 7], # Tip Face
-            [2, 3, 7, 6], # Trailing Edge
-            [4, 1, 5, 8], # Leading Edge
-        ]
-        
-        return verts, faces
+        faces = [[1, 2, 3, 4], [8, 7, 6, 5], [4, 3, 7, 8], [2, 1, 5, 6], [3, 2, 6, 7], [1, 4, 8, 5]]
+        return verts.tolist(), faces
 
     def _generate(self):
         geo = self.geo
         
         # HULL
-        num_points = 60
+        num_points = 50
+        # Generate profiles
         x_nose = np.linspace(0, geo['a'], num_points)
         r_nose = (geo['d']/2) - ((geo['d']/2) - geo['a_offset']) * (1 - x_nose/geo['a'])**geo['n']
         
@@ -121,136 +135,104 @@ class AUVGeometry:
         c_len = geo['l'] - geo['lf']
         r_tail = geo['c_offset'] + ((geo['d']/2) - geo['c_offset']) * (1 - ((x_tail - geo['lf'])/c_len)**geo['n'])
         
-        # Combine
+        # Combine profiles
+        # We preserve the segmentation logic here to map materials later
+        # Original logic: Nose(50) + Mid(49) + Tail(49) + Caps
+        
         x_profile = np.concatenate([x_nose, x_mid[1:], x_tail[1:]])
         r_profile = np.concatenate([r_nose, r_mid[1:], r_tail[1:]])
         
-        # Cap the end
-        x_profile = np.append(x_profile, geo['l'])
-        r_profile = np.append(r_profile, 0.0)
+        # Add Caps
+        x_profile = np.insert(x_profile, 0, 0.0); r_profile = np.insert(r_profile, 0, 0.001)
+        x_profile = np.append(x_profile, geo['l']); r_profile = np.append(r_profile, 0.001)
         
         hull_verts, hull_faces = self._generate_revolution_surface(x_profile, r_profile)
-        self.meshes['remus_hull.obj'] = (hull_verts, hull_faces)
+        
+        # Calculate Face Splits based on point counts
+        # Index 0 is Start Cap. 
+        # Nose section: Cap(1) + Nose(50) = 51 points -> rows 0 to 50
+        # Body section: + Mid(49) = 100 points -> rows 51 to 99
+        # Tail section: + Tail(49) + Cap(1) = 150 points -> rows 100 to 149
+        
+        # Faces are generated per row. There are `num_theta` faces per row segment.
+        # We need to slice the list of faces based on rows.
+        num_theta = 40
+        faces_per_row = num_theta # In revolution surface loop
+        
+        # Row indices where sections end
+        # Nose ends at index 50 (x_nose[-1]). So faces 0 to 49 are Nose.
+        row_split_1 = 50 
+        # Body ends at index 99 (x_mid[-1]). So faces 50 to 98 are Body.
+        row_split_2 = 99 
+        
+        # Convert row indices to face list indices
+        split_idx_1 = row_split_1 * faces_per_row
+        split_idx_2 = row_split_2 * faces_per_row
+        
+        faces_nose = hull_faces[:split_idx_1]
+        faces_body = hull_faces[split_idx_1:split_idx_2]
+        faces_tail = hull_faces[split_idx_2:]
+        
+        self.meshes['remus_hull.obj'] = (hull_verts, {
+            "Mat_Nose": faces_nose,
+            "Mat_Body": faces_body,
+            "Mat_Tail": faces_tail
+        })
 
         # FINS
-        all_fin_verts = []
-        all_fin_faces = []
-        fin_offset = 0
-        
-        # HARD CONSTRAINT: Fins start well before the tail ends
-        # Hull ends at geo['l'] (1.33m)
-        # Fins are 12cm long. Place them 5cm from the very tip.
-        fin_end_x = geo['l'] - 0.05 
-        fin_start_x = fin_end_x - 0.12
-        
-        # Calculate exact hull radius at fin location to ensure attachment
-        # Using the tail curve formula
-        def get_r_at_x(x):
-            if x < geo['lf']: return geo['d']/2
-            x_norm = (x - geo['lf']) / c_len
-            return geo['c_offset'] + ((geo['d']/2) - geo['c_offset']) * (1 - x_norm**geo['n'])
-
-        r_root_start = get_r_at_x(fin_start_x)
-        r_root_end = get_r_at_x(fin_end_x)
-        
-        # Embed fins slightly (minus 1cm) to ensure no gap
-        r_root_start -= 0.01
-        r_root_end -= 0.01
-        
+        all_fin_verts = []; all_fin_faces = []; fin_offset = 0
+        fin_length = 0.12; fin_span = 0.1; fin_taper_ratio = 0.8
+        fin_x_end = geo['l'] - 0.025; fin_x_start = fin_x_end - fin_length
+        c_len = geo['l'] - geo['lf']
+        r_fin_start = geo['c_offset'] + ((geo['d']/2) - geo['c_offset']) * (1 - ((fin_x_start - geo['lf'])/c_len)**geo['n'])
+        r_fin_end = geo['c_offset'] + ((geo['d']/2) - geo['c_offset']) * (1 - ((fin_x_end - geo['lf'])/c_len)**geo['n'])
         fin_span = 0.1
-        thickness = 0.015 # 1.5cm thick
         
         for i in range(4):
             angle = i * (np.pi / 2)
-            
-            # Generate local box fin
             v_loc, f_loc = self._generate_box_fin(
-                root_x=[fin_start_x, fin_end_x], root_z=[r_root_start, r_root_end],
-                tip_x=[fin_start_x + 0.03, fin_end_x], tip_z=[r_root_start + fin_span, r_root_end + fin_span*0.8],
-                thickness=thickness
+                root_x=[fin_x_start, fin_x_end], root_z=[r_fin_start - 0.005, r_fin_end - 0.005],
+                tip_x=[fin_x_start + 0.02, fin_x_end], tip_z=[r_fin_start + fin_span, r_fin_end + fin_span * fin_taper_ratio], thickness=0.02
             )
-            
-            # Rotate and Shift
-            R = np.array([
-                [1, 0, 0],
-                [0, np.cos(angle), -np.sin(angle)],
-                [0, np.sin(angle), np.cos(angle)]
-            ])
-            
+            R = np.array([[1, 0, 0], [0, np.cos(angle), -np.sin(angle)], [0, np.sin(angle), np.cos(angle)]])
             v_rot = (R @ np.array(v_loc).T).T
-            v_rot[:, 0] -= self.origin_shift[0] # Shift X to align with hull
-            
             all_fin_verts.extend(v_rot.tolist())
-            for face in f_loc:
-                all_fin_faces.append([idx + fin_offset for idx in face])
+            for face in f_loc: all_fin_faces.append([idx + fin_offset for idx in face])
             fin_offset += 8
             
-        self.meshes['remus_fins.obj'] = (all_fin_verts, all_fin_faces)
+        self.meshes['remus_fins.obj'] = (all_fin_verts, {
+            "Mat_Fins": all_fin_faces
+        })
 
         # PROPELLER
-        # Hub starts exactly where fins end
-        hub_start = geo['l'] - 0.02 # Slight overlap
-        hub_len = 0.06
-        x_hub = np.linspace(hub_start, hub_start + hub_len, 5)
-        # Hub radius matches tail end radius
-        r_hub_val = geo['c_offset']
-        r_hub = np.full_like(x_hub, r_hub_val)
-        
-        # Cap hub
-        x_hub = np.append(x_hub, hub_start + hub_len)
-        r_hub = np.append(r_hub, 0.0)
-        
+        x_hub = np.linspace(geo['l'], geo['l'] + 0.05, 5)
+        r_hub = np.full_like(x_hub, geo['c_offset'] * 0.8)
+        x_hub = np.append(x_hub, geo['l'] + 0.05); r_hub = np.append(r_hub, 0.001)
         hub_verts, hub_faces = self._generate_revolution_surface(x_hub, r_hub, num_theta=20)
         
-        # Blades
-        blade_verts = []
-        blade_faces = []
-        offset = len(hub_verts)
-        num_blades = 4 # You requested 4 blades
-        blade_x = hub_start + hub_len/2
-        
+        blade_verts = []; blade_faces = []; offset = len(hub_verts)
+        num_blades = 4; blade_x = geo['l'] + 0.025
         for i in range(num_blades):
-            angle_base = i * (2 * np.pi / num_blades)
+            angle = i * (2 * np.pi / num_blades)
+            v_b = [[blade_x, -0.01, r_hub[0]], [blade_x, 0.01, r_hub[0]], [blade_x, 0.01, r_hub[0]+0.08], [blade_x, -0.01, r_hub[0]+0.08]]
+            R = np.array([[1,0,0],[0,np.cos(angle),-np.sin(angle)],[0,np.sin(angle),np.cos(angle)]])
+            b_rot = (R @ np.array(v_b).T).T; b_rot[:, 0] -= self.origin[0]
+            blade_verts.extend(b_rot.tolist())
+            blade_faces.append([offset+1, offset+2, offset+3, offset+4])
+            blade_faces.append([offset+4, offset+3, offset+2, offset+1])
+            offset += 4
             
-            # Simple Blade geometry (thin box)
-            v_loc, f_loc = self._generate_box_fin(
-                root_x=[blade_x-0.01, blade_x+0.01], root_z=[r_hub_val, r_hub_val],
-                tip_x=[blade_x-0.01, blade_x+0.01], tip_z=[r_hub_val+0.08, r_hub_val+0.08],
-                thickness=0.005
-            )
-            
-            # Twist the blade 30 degrees
-            twist = np.radians(30)
-            R_twist = np.array([
-                [np.cos(twist), 0, np.sin(twist)],
-                [0, 1, 0],
-                [-np.sin(twist), 0, np.cos(twist)]
-            ])
-            # (Simplified twist rotation logic would go here, omitting for stability)
-
-            # Rotate around Hub
-            R = np.array([
-                [1, 0, 0],
-                [0, np.cos(angle_base), -np.sin(angle_base)],
-                [0, np.sin(angle_base), np.cos(angle_base)]
-            ])
-            
-            v_rot = (R @ np.array(v_loc).T).T
-            v_rot[:, 0] -= self.origin_shift[0]
-            
-            blade_verts.extend(v_rot.tolist())
-            for face in f_loc:
-                blade_faces.append([idx + offset for idx in face])
-            offset += 8
-            
-        full_prop_verts = hub_verts + blade_verts
-        full_prop_faces = hub_faces + blade_faces
-        self.meshes['remus_propeller.obj'] = (full_prop_verts, full_prop_faces)
+        self.meshes['remus_propeller.obj'] = (hub_verts + blade_verts, {
+            "Mat_Prop": hub_faces + blade_faces
+        })
 
     def export(self):
-        for filename, (v, f) in self.meshes.items():
-            write_obj(filename, v, f)
+        # Create the Material Library
+        write_mtl("remus.mtl")
+        
+        # Export OBJs with references to it
+        for filename, (v, parts) in self.meshes.items():
+            write_obj(filename, v, parts)
 
 if __name__ == "__main__":
-    builder = AUVGeometry()
-    builder.export()
+    AUVGeometryFinal().export()
