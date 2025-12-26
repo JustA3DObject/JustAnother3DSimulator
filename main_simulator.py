@@ -141,7 +141,7 @@ if __name__ == '__main__':
     print("  X - Accelerate Backward")
     print("  A - Yaw Left (Turn Left)")
     print("  D - Yaw Right (Turn Right)")
-    print("  Z - Pitch Up (NSose Up)")
+    print("  Z - Pitch Up (Nose Up)")
     print("  C - Pitch Down (Nose Down)")
     print("  B - Brake")
     print("  R - Reset")
