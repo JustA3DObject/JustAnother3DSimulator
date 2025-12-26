@@ -98,8 +98,10 @@ def create_interactive_auv():
         plot_artists['dvl_collection'] = Poly3DCollection(assets['dvl_faces'], facecolors='orange', alpha=0.8)
         ax.add_collection3d(plot_artists['dvl_collection'])
         
-        for fin_verts in assets['fins']:
-            fin_col = Poly3DCollection([fin_verts], facecolors='darkslategrey', edgecolors='black', alpha=0.9)
+        # assets['fins'] is a list of fins, where each fin is a list of faces (polygons).
+        # Poly3DCollection takes a list of polygons to form a single 3D object.
+        for fin_faces in assets['fins']:
+            fin_col = Poly3DCollection(fin_faces, facecolors='darkslategrey', edgecolors='black', alpha=0.9)
             ax.add_collection3d(fin_col)
             plot_artists['fin_collections'].append(fin_col)
         

@@ -1,10 +1,11 @@
 import numpy as np
 from auv_parameters import REMUS_PARAMS, PARAMS_DERIVED
-from auv_physics import jacobian # Import from our new physics file
+from auv_physics import jacobian 
 
 class AUVGeometry:
     """
     Handles the generation and transformation of the AUV's 3D mesh.
+    
     """
     def __init__(self):
         # Load geometric params and origin
@@ -13,6 +14,7 @@ class AUVGeometry:
         
         # Base geometry is stored here, centered at the origin (CB)
         self.base_geometry = {}
+        # self.fins is a list of fins, where each fin is a list of faces (polygons)
         self.fins = []
         
         # Generate the geometry on initialization
@@ -47,7 +49,7 @@ class AUVGeometry:
         return R
 
     def _transform_points(self, X, Y, Z, R, position):
-        """Apply rotation and translation to a set of points."""
+        """Apply rotation and translation to a set of points (Surface/MeshGrid style)."""
         points = np.stack([X.flatten(), Y.flatten(), Z.flatten()])
         rotated = R @ points
         translated = rotated + position.reshape(3, 1)
@@ -85,14 +87,61 @@ class AUVGeometry:
             translated = rotated + position
             assets['dvl_faces'].append(translated)
             
-        # Transform fins
+        # Transform 3D Fins
+        # Structure: List of Fins -> List of Faces -> Array of Vertices
         assets['fins'] = []
-        for fin_array in self.fins:
-            rotated = (R @ fin_array.T).T
-            translated = rotated + position
-            assets['fins'].append(translated)
+        for fin_faces in self.fins:
+            transformed_fin = []
+            for face in fin_faces:
+                # 'face' is an (N, 3) numpy array
+                rotated = (R @ face.T).T
+                translated = rotated + position
+                transformed_fin.append(translated)
+            assets['fins'].append(transformed_fin)
             
         return assets
+
+    def _generate_prism_fin(self, root_x, root_z, tip_x, tip_z, thickness):
+        """
+        Generates a triangular prism fin.
+        Adapted from generate_meshes.py to work with numpy arrays directly.
+        
+        Returns a list of faces, where each face is an (N, 3) numpy array.
+        """
+        t_half = thickness / 2
+        
+        # 6 Vertices for a triangular prism
+        # Root Leading Edge (Center - Pointed)
+        # Tip Leading Edge (Center - Pointed)
+        # Root Trailing Edge (Top)
+        # Root Trailing Edge (Bottom)
+        # Tip Trailing Edge (Top)
+        # Tip Trailing Edge (Bottom)
+        
+        verts = np.array([
+            [root_x[0], 0.0, root_z[0]],       
+            [tip_x[0],  0.0, tip_z[0]],        
+            [root_x[1], t_half, root_z[1]],    
+            [root_x[1], -t_half, root_z[1]],   
+            [tip_x[1],  t_half, tip_z[1]],     
+            [tip_x[1],  -t_half, tip_z[1]]     
+        ])
+        
+        # Define Faces (indices)
+        # Ensure CCW winding order for outside normals
+        face_indices = [
+            [0, 2, 4, 1], # Top Slope
+            [0, 1, 5, 3], # Bottom Slope
+            [2, 3, 5, 4], # Back Face
+            [0, 3, 2],    # Root Side (Triangle)
+            [1, 4, 5]     # Tip Side (Triangle)
+        ]
+        
+        faces = []
+        for idx_list in face_indices:
+            faces.append(verts[idx_list])
+            
+        return faces
 
     def _generate_base_geometry(self):
         """
@@ -103,8 +152,8 @@ class AUVGeometry:
         geo = self.geo
         
         r_max = geo['d'] / 2
-        num_x_points = 100
-        num_theta_points = 80
+        num_x_points = 50 
+        num_theta_points = 40
         theta = np.linspace(0, 2 * np.pi, num_theta_points)
         z_offset = 0.001
                 
@@ -177,26 +226,55 @@ class AUVGeometry:
         Y_mast = 0 + mast_radius * np.sin(TH_mast)
         
         # Fins
-        fin_length = 0.12; fin_span = 0.1; fin_taper_ratio = 0.8
-        fin_x_end = geo['l'] - 0.025; fin_x_start = fin_x_end - fin_length
+        fin_length = 0.12
+        fin_span = 0.1
+        fin_taper_ratio = 0.8
+        fin_thickness = 0.02
+        
+        fin_x_end = geo['l'] - 0.025
+        fin_x_start = fin_x_end - fin_length
+        
+        # Calculate hull radius at fin start and end positions
         x_norm_fin_start = (fin_x_start - geo['lf']) / c
         r_fin_start = geo['c_offset'] + (r_max - geo['c_offset']) * (1 - x_norm_fin_start**geo['n'])
+        
         x_norm_fin_end = (fin_x_end - geo['lf']) / c
         r_fin_end = geo['c_offset'] + (r_max - geo['c_offset']) * (1 - x_norm_fin_end**geo['n'])
-        fin_verts = []
-        v1 = [fin_x_start, r_fin_start, 0]; v2 = [fin_x_start, r_fin_start + fin_span, 0]
-        v3 = [fin_x_end, r_fin_end + fin_span * fin_taper_ratio, 0]; v4 = [fin_x_end, r_fin_end, 0]
-        fin_verts.append([v1, v2, v3, v4]); # ... (rest of fin definitions)
-        v1 = [fin_x_start, -r_fin_start, 0]; v2 = [fin_x_start, -(r_fin_start + fin_span), 0]
-        v3 = [fin_x_end, -(r_fin_end + fin_span * fin_taper_ratio), 0]; v4 = [fin_x_end, -r_fin_end, 0]
-        fin_verts.append([v1, v2, v3, v4])
-        v1 = [fin_x_start, 0, r_fin_start]; v2 = [fin_x_start, 0, r_fin_start + fin_span]
-        v3 = [fin_x_end, 0, r_fin_end + fin_span * fin_taper_ratio]; v4 = [fin_x_end, 0, r_fin_end]
-        fin_verts.append([v1, v2, v3, v4])
-        v1 = [fin_x_start, 0, -r_fin_start]; v2 = [fin_x_start, 0, -(r_fin_start + fin_span)]
-        v3 = [fin_x_end, 0, -(r_fin_end + fin_span * fin_taper_ratio)]; v4 = [fin_x_end, 0, -r_fin_end]
-        fin_verts.append([v1, v2, v3, v4])
         
+        self.fins = [] # Reset fins list
+        
+        # Generate 4 fins (0, 90, 180, 270 degrees)
+        for i in range(4):
+            angle = i * (np.pi / 2)
+            
+            # Generate local 3D fin faces (prism)
+            # The _generate_prism_fin function assumes the fin grows in +Z direction (vertical)
+            # We map the radius (r) to the Z coordinate
+            local_faces = self._generate_prism_fin(
+                root_x=[fin_x_start, fin_x_end],
+                root_z=[r_fin_start - 0.005, r_fin_end - 0.005], # Embed slightly in hull
+                tip_x=[fin_x_start + 0.02, fin_x_end],
+                tip_z=[r_fin_start + fin_span, r_fin_end + fin_span * fin_taper_ratio],
+                thickness=fin_thickness
+            )
+            
+            # Rotate fin to its correct position (0, 90, 180, 270)
+            # This rotation is about the X-axis (Roll)
+            R_fin = np.array([
+                [1, 0, 0],
+                [0, np.cos(angle), -np.sin(angle)],
+                [0, np.sin(angle), np.cos(angle)]
+            ])
+            
+            rotated_faces = []
+            for face in local_faces:
+                # Rotate the face vertices
+                # face is (N, 3), so we do (R @ face.T).T
+                rotated_face = (R_fin @ face.T).T
+                rotated_faces.append(rotated_face)
+                
+            self.fins.append(rotated_faces)
+
         # 4-Bladed Propeller
         prop_tip_radius = fin_span * 1.0; prop_hub_radius = r_final
         prop_pitch = 0.1; prop_chord_angle = np.pi / 8; prop_x_pos = geo['l']
@@ -256,10 +334,14 @@ class AUVGeometry:
         X_cage -= origin_x; Y_cage -= origin_y; Z_cage -= origin_z
 
         # Re-center Fins
-        fin_verts_recentered = []
-        for fin in fin_verts:
-            fin_array_recentered = np.array(fin) - self.origin_vec_from_nose
-            fin_verts_recentered.append(fin_array_recentered)
+        fin_faces_recentered = []
+        for fin_faces in self.fins:
+            # fin_faces is a list of (N,3) arrays
+            new_fin = []
+            for face in fin_faces:
+                new_fin.append(face - self.origin_vec_from_nose)
+            fin_faces_recentered.append(new_fin)
+        self.fins = fin_faces_recentered
 
         # Store Geometry
         self.base_geometry = {
@@ -273,4 +355,3 @@ class AUVGeometry:
             'cage': (X_cage, Y_cage, Z_cage),
             'prop_blades': prop_blades_recentered,
         }
-        self.fins = fin_verts_recentered
